@@ -39,20 +39,24 @@ def annotate_unknown(
     print(f"\n有 {len(unknown_items)} 条 status=unknown，逐条补标（f=不会 p=半会 x=跳过）:")
 
     status_updates: dict[int, ItemStatus] = {}
-    for i, item in enumerate(unknown_items):
-        print(f"\n  [{i + 1}/{len(unknown_items)}] {item.question}")
-        if item.user_note:
-            print(f"  备注: {item.user_note}")
-        for _ in range(max_retries):
-            raw = prompt_fn("  状态 (f/p/x): ").strip().lower()
-            if raw in ("f", "p"):
-                status_updates[i] = _STATUS_MAP[raw]
-                break
-            if raw == "x":
-                break
-            print(f"  无效输入 '{raw}'，请输入 f / p / x")
-        else:
-            print("  重试次数用尽，保持 unknown")
+    try:
+        for i, item in enumerate(unknown_items):
+            print(f"\n  [{i + 1}/{len(unknown_items)}] {item.question}")
+            if item.user_note:
+                print(f"  备注: {item.user_note}")
+            for _ in range(max_retries):
+                raw = prompt_fn("  状态 (f/p/x): ").strip().lower()
+                if raw in ("f", "p"):
+                    status_updates[i] = _STATUS_MAP[raw]
+                    break
+                if raw == "x":
+                    break
+                print(f"  无效输入 '{raw}'，请输入 f / p / x")
+            else:
+                print("  重试次数用尽，保持 unknown")
+    except (EOFError, KeyboardInterrupt):
+        # stdin 不可交互（如管道/CI 环境 isatty 误报）→ 停止补标，保持 unknown
+        print("\n输入不可用，剩余条目保持 unknown")
 
     updated = []
     for item in items:
