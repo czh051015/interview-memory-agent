@@ -1,0 +1,127 @@
+"""秋招 Copilot v1 —— 面经消化 Agent。
+用法：
+  python run_interview.py              # 读取 data/seed/interview.txt，追加到错题本
+  python run_interview.py --fresh       # 先清空旧数据再拆解
+  python run_interview.py 你的面经...   # 命令行直接贴复盘
+"""
+import sys, io, logging
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+
+from pathlib import Path
+from src.cleaner.decompose import decompose
+from src.cleaner.schema import ItemStatus
+from src.memory import knowledge_store as store
+
+args = [a for a in sys.argv[1:] if a != "--fresh"]
+fresh_mode = "--fresh" in sys.argv
+
+if fresh_mode:
+    store.clear()
+    print("(已清空旧数据)")
+
+print("=" * 60)
+print("秋招 Copilot v1 —— 面经消化 Agent")
+
+if args:
+    text = " ".join(args)
+    print(f"输入: 命令行 ({len(text)} 字)")
+elif Path("data/seed/interview.txt").exists():
+    text = Path("data/seed/interview.txt").read_text(encoding="utf-8")
+    print(f"输入: data/seed/interview.txt ({len(text)} 字)")
+else:
+    print("用法: python run_interview.py [--fresh] [面经文本]")
+    print("或: 创建 data/seed/interview.txt 写入面经")
+    sys.exit(0)
+
+print("正在拆解...")
+print("=" * 60)
+
+result = decompose(text)
+
+print(f"\n公司: {result.company or '(未识别)'}")
+print(f"岗位: {result.role or '(未识别)'}")
+print(f"轮次: {result.round or '(未识别)'}")
+print(f"日期: {result.date or '(未识别)'}")
+print(f"\n拆出 {result.total_count} 道题:")
+print()
+
+fail_count = 0
+partial_count = 0
+pass_count = 0
+
+for item in result.items:
+    cat_tag = " [ℹ️信息]" if item.category == "info" else ""
+    emoji = {"fail": "❌", "partial": "⚠️", "pass": "✅", "unknown": "❓"}.get(item.status.value, "❓")
+    print(f"  {emoji} [{item.status.value.upper()}]{cat_tag} {item.question}")
+    if item.user_note:
+        print(f"     备注: {item.user_note}")
+    if item.topic:
+        print(f"     主题: {item.topic}")
+    print()
+
+    # ISSUES F2: info 类不计入错题统计
+    if item.category == "info":
+        continue
+    if item.status == ItemStatus.FAIL:
+        fail_count += 1
+    elif item.status == ItemStatus.PARTIAL:
+        partial_count += 1
+    elif item.status == ItemStatus.PASS:
+        pass_count += 1
+
+# ── 入库 ──
+print("=" * 60)
+before_count = store.get_stats()["total"]
+count = store.store_items(result.items)
+print(f"本次入库: {count} 条")
+
+# ── 统计 ──
+stats = store.get_stats()
+print()
+print("=" * 60)
+print("📊 本次拆解:")
+print(f"  ❌ 不会:  {fail_count} 题")
+print(f"  ⚠️ 半会:  {partial_count} 题")
+print(f"  ✅ 已过:  {pass_count} 题")
+print(f"  ❓ 未知:  {result.unknown_count} 题")
+print(f"  合计:    {result.total_count} 题")
+
+if before_count > 0:
+    print(f"\n📊 累计（含历史）: {stats['total']} 题")
+    print(f"  ❌ fail: {stats['by_status']['fail']} | ⚠️ partial: {stats['by_status']['partial']} | ✅ pass: {stats['by_status']['pass']}")
+
+if stats["hot_topics"]:
+    print(f"\n  🔥 累计薄弱主题 TOP5:")
+    for t in stats["hot_topics"]:
+        print(f"     {t['topic']} ({t['count']} 题)")
+
+if result.unknown_count > 0:
+    print(f"\n⚠️ 本次有 {result.unknown_count} 条 status=unknown，建议手动标注")
+
+# ── 错题列表 ──
+knowledge_items = [it for it in result.items if it.status in (ItemStatus.FAIL, ItemStatus.PARTIAL) and it.category != "info"]
+if knowledge_items:
+    print()
+    print("=" * 60)
+    print("📖 需要复习的题目:")
+    for item in knowledge_items:
+        print(f"  [{item.status.value.upper()}] {item.question}")
+
+    # ── 检索演示 ──
+    print()
+    print("=" * 60)
+    print("🔍 错题本检索:")
+    all_fails = store.search(status="fail")
+    print(f"  fail 总数: {len(all_fails)} 题")
+    for item in all_fails[:5]:
+        print(f"  ❌ {item.question} ({item.topic})")
+
+    if len(all_fails) > 5:
+        print(f"  ... 还有 {len(all_fails) - 5} 题")
+
+    all_partials = store.search(status="partial")
+    if all_partials:
+        print(f"\n  partial 总数: {len(all_partials)} 题")
+        for item in all_partials[:3]:
+            print(f"  ⚠️ {item.question} ({item.topic})")
