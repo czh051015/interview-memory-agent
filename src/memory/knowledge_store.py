@@ -9,7 +9,7 @@ from chromadb.config import Settings as ChromaSettings
 
 from src.config import CHROMA_DIR
 from src.memory.embedding import embed_texts
-from src.cleaner.schema import KnowledgeItem, ItemStatus
+from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, ItemSource
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,7 @@ def search(
     topic: Optional[str] = None,
     company: Optional[str] = None,
     status: Optional[str] = None,
+    source: Optional[str] = None,
     top_k: int = 20,
     similarity_threshold: Optional[float] = None,
 ) -> list[KnowledgeItem]:
@@ -83,8 +84,12 @@ def search(
 
     - 有 query → 语义搜索（cosine similarity）
     - 无 query → 只按 metadata 过滤（全量）
-    - topic/company/status → metadata 精确过滤
+    - topic/company/status/source → metadata 精确过滤
     - similarity_threshold → 语义搜索时，低于此值的条目被丢弃（建议 0.3-0.5）
+
+    注意：source 过滤依赖 metadata 里存在 source key。
+    存量旧数据（v1.0 入库）没有该 key，先跑 run_market.py prioritize
+    或 run_interview.py --fresh 重新 upsert 补齐。
 
     Returns: KnowledgeItem 列表（按相似度降序）
     """
@@ -98,6 +103,8 @@ def search(
         where_parts.append({"company": company})
     if status:
         where_parts.append({"status": status})
+    if source:
+        where_parts.append({"source": source})
 
     where_filter = None
     if len(where_parts) == 1:
@@ -139,15 +146,18 @@ def search(
 
 
 def get_stats() -> dict:
-    """统计各 status 数量 + 热门 topic。"""
+    """统计各 status 数量 + 热门 topic + 来源分布。"""
     items = search(top_k=1000)
 
     status_count = {"fail": 0, "partial": 0, "pass": 0, "unknown": 0}
     topic_count: dict[str, int] = {}
+    source_count: dict[str, int] = {}
 
     for item in items:
+        source_count[item.source.value] = source_count.get(item.source.value, 0) + 1
         # ISSUES F2: info 类不计入错题统计
-        if item.category == "info":
+        # v1.5: JD 关键词不是"题"，不混入错题/热门统计
+        if item.category == "info" or item.source == ItemSource.JD:
             continue
         status_count[item.status.value] = status_count.get(item.status.value, 0) + 1
         if item.topic:
@@ -159,6 +169,7 @@ def get_stats() -> dict:
     return {
         "total": len(items),
         "by_status": status_count,
+        "by_source": source_count,
         "hot_topics": [{"topic": t, "count": c} for t, c in hot_topics],
     }
 
@@ -182,8 +193,11 @@ def _to_metadata(item: KnowledgeItem) -> dict:
         "date": item.date,
         "status": item.status.value,
         "user_note": item.user_note[:200],  # 截断
-        "category": item.category.value if hasattr(item.category, 'value') else str(item.category),
+        "category": item.category.value,
+        "source": item.source.value,
+        "priority": item.priority,
         "mastery_score": item.mastery_score,
+        "last_reviewed_at": item.last_reviewed_at.isoformat() if item.last_reviewed_at else "",
         "review_count": item.review_count,
         "created_at": item.created_at.isoformat() if item.created_at else "",
     }
@@ -222,12 +236,18 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
         except ValueError:
             status = ItemStatus.UNKNOWN
 
-        cat_val = meta.get("category", "knowledge")
         try:
-            from src.cleaner.schema import ItemCategory
-            category = ItemCategory(cat_val) if cat_val in ("knowledge", "info") else ItemCategory.KNOWLEDGE
-        except (ValueError, ImportError):
+            category = ItemCategory(meta.get("category", "knowledge"))
+        except ValueError:
             category = ItemCategory.KNOWLEDGE
+
+        # v1.0 存量数据没有 source key → 默认 self_review（phase-2-plan §2.3）
+        try:
+            source = ItemSource(meta.get("source", ItemSource.SELF_REVIEW.value))
+        except ValueError:
+            source = ItemSource.SELF_REVIEW
+
+        last_reviewed = meta.get("last_reviewed_at", "")
 
         item = KnowledgeItem(
             id=item_id,
@@ -242,6 +262,9 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
             user_note=meta.get("user_note", ""),
             mastery_score=float(meta.get("mastery_score", 1.0)),
             review_count=int(meta.get("review_count", 0)),
+            source=source,
+            priority=float(meta.get("priority", 1.0)),
+            last_reviewed_at=datetime.fromisoformat(last_reviewed) if last_reviewed else None,
             created_at=datetime.fromisoformat(meta["created_at"]) if meta.get("created_at") else None,
         )
         # 附上余弦相似度（用于阈值过滤，ISSUES F1）

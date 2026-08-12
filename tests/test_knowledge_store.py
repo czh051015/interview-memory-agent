@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from src.cleaner.schema import KnowledgeItem, ItemStatus
+from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemSource
 
 
 class TestKnowledgeStore:
@@ -82,3 +82,78 @@ class TestStats:
         assert stats["by_status"]["pass"] == 1
         assert stats["hot_topics"][0]["topic"] == "Agent"
         assert stats["hot_topics"][0]["count"] == 2
+
+    @patch("src.memory.knowledge_store.search")
+    def test_stats_excludes_jd_from_wrong_question_pool(self, mock_search):
+        """v1.5: JD 关键词不是"题"，不进 by_status/hot_topics，但计 by_source。"""
+        mock_search.return_value = [
+            KnowledgeItem(id="ki_001", question="Q1", topic="RAG", status=ItemStatus.UNKNOWN),
+            KnowledgeItem(id="jd_001", question="RAG", topic="RAG",
+                          status=ItemStatus.UNKNOWN, source=ItemSource.JD),
+        ]
+
+        import src.memory.knowledge_store as store_mod
+        stats = store_mod.get_stats()
+
+        assert stats["by_source"] == {"self_review": 1, "jd": 1}
+        assert stats["by_status"]["unknown"] == 1  # 只有 ki_001 计入
+        assert stats["hot_topics"] == [{"topic": "RAG", "count": 1}]  # jd 不计入
+
+
+class TestV15Metadata:
+    """v1.5 source/priority metadata 往返与存量兼容。"""
+
+    def _store_mod(self):
+        import src.memory.knowledge_store as store_mod
+        return store_mod
+
+    def test_to_metadata_includes_source_priority(self):
+        store_mod = self._store_mod()
+        item = KnowledgeItem(
+            id="jd_001", question="RAG", topic="RAG", source=ItemSource.JD, priority=1.8,
+        )
+        meta = store_mod._to_metadata(item)
+        assert meta["source"] == "jd"
+        assert meta["priority"] == 1.8
+        assert meta["last_reviewed_at"] == ""
+
+    def test_parse_results_defaults_old_data(self):
+        """v1.0 存量记录没有 source/priority key → 回退 self_review / 1.0。"""
+        store_mod = self._store_mod()
+        results = {
+            "ids": ["ki_old"],
+            "documents": ["旧题"],
+            "metadatas": [{
+                "question": "旧题", "topic": "RAG", "company": "", "role": "",
+                "round": "", "date": "", "status": "fail", "user_note": "",
+                "category": "knowledge", "mastery_score": 1.0, "review_count": 0,
+                "created_at": "2026-08-12T00:00:00",
+            }],
+        }
+        items = store_mod._parse_results(results)
+        assert len(items) == 1
+        assert items[0].source == ItemSource.SELF_REVIEW
+        assert items[0].priority == 1.0
+        assert items[0].last_reviewed_at is None
+
+    @patch("src.memory.knowledge_store.chromadb.PersistentClient")
+    def test_search_by_source_where(self, mock_client_class):
+        """验收标准 4：source 过滤传到 Chroma where。"""
+        mock_collection = MagicMock()
+        mock_client = MagicMock()
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_client_class.return_value = mock_client
+        mock_collection.get.return_value = {"ids": [], "documents": [], "metadatas": []}
+
+        store_mod = self._store_mod()
+        store_mod._client = None
+
+        store_mod.search(source="jd")
+        mock_collection.get.assert_called_once()
+        assert mock_collection.get.call_args.kwargs["where"] == {"source": "jd"}
+
+        # 组合过滤 → $and
+        store_mod.search(status="fail", source="self_review")
+        assert mock_collection.get.call_args.kwargs["where"] == {
+            "$and": [{"status": "fail"}, {"source": "self_review"}],
+        }

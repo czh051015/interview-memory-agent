@@ -30,6 +30,10 @@ SURGE_THRESHOLD = 1.20       # 增幅 > 20%
 EMERGING_MIN_COUNT = 3       # 新簇至少 3 条才报
 DECAY_THRESHOLD = 0.70       # 降幅 > 30%（v2 启用）
 
+# ── 交叉验证 (v1.5) ──
+# 题库 topic 出现 ≥N 次视为高频（当前池子 ~40 条，初值 2，攒够数据后校准）
+HIGH_FREQ_MIN_COUNT = int(os.getenv("HIGH_FREQ_MIN_COUNT", "2"))
+
 # ── 简报 ──
 BRIEFING_VALIDITY_DAYS = 30  # 默认有效期
 

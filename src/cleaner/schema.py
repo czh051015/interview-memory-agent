@@ -18,6 +18,13 @@ class ItemCategory(str, Enum):
     INFO = "info"            # 信息性问题（自我介绍、有实习过吗）
 
 
+class ItemSource(str, Enum):
+    """数据来源三枚举（phase-2-plan §2.3）。"""
+    SELF_REVIEW = "self_review"          # 自己的面试复盘
+    PUBLIC_JINGYAN = "public_jingyan"    # 网上面经（只有题目，无自评）
+    JD = "jd"                            # 目标公司 JD 技能关键词
+
+
 class KnowledgeItem(BaseModel):
     """一条拆解后的面试 Q&A 记录。"""
     id: str = Field(default="", description="ki_20260815_001")
@@ -34,6 +41,8 @@ class KnowledgeItem(BaseModel):
     last_reviewed_at: Optional[datetime] = None
     review_count: int = 0
     related_items: list[str] = Field(default_factory=list)
+    source: ItemSource = ItemSource.SELF_REVIEW  # phase-2-plan §2.3
+    priority: float = Field(default=1.0, ge=0.0)  # 交叉验证修正的复习优先级
     created_at: datetime = Field(default_factory=datetime.utcnow)
     _similarity: float = 0.0  # 内部使用，不入库
 
