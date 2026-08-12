@@ -2,7 +2,26 @@
 
 import pytest
 from src.cleaner.status import infer_status
+from src.cleaner.decompose import has_placeholder
 from src.cleaner.schema import ItemStatus
+
+
+class TestHasPlaceholder:
+    """ISSUES E2：占位符检测真值表。"""
+
+    def test_matches_placeholders(self):
+        assert has_placeholder("volatile的***是什么？")
+        assert has_placeholder("答案是...，略")
+        assert has_placeholder("题目里有个略字")
+
+    def test_plain_text_no_match(self):
+        assert not has_placeholder("volatile关键字的作用？")
+        assert not has_placeholder("RRF原理")
+        assert not has_placeholder("")
+
+    def test_single_asterisk_no_match(self):
+        # 单个 * 可能是强调符，不算占位符
+        assert not has_placeholder("a * b 的运算")
 
 
 class TestStatusInference:

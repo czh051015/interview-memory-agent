@@ -1,7 +1,7 @@
 # OfferLoop Makefile
 # v1.0 — 常用命令快捷入口
 
-.PHONY: help install dev-install test lint cov clean demo-empty run-all eval run-webhook run-approval
+.PHONY: help install dev-install test lint cov clean demo-empty run-all eval run-webhook run-approval market-jingyan market-jd market-prioritize eval-jd
 
 help:  ## 显示帮助信息
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -53,6 +53,18 @@ run-approval-auto:  ## 管道模式（含审批交互）
 
 eval:  ## 运行评估脚本
 	python eval/run_eval.py
+
+market-jingyan:  ## 导入 seed 网上面经题库（v1.5）
+	python run_market.py jingyan data/seed/public_jingyan.txt
+
+market-jd:  ## 导入 seed JD 并提取技能关键词（v1.5）
+	python run_market.py jd data/seed/jd/
+
+market-prioritize:  ## 交叉验证重算优先级 + 复习列表（v1.5）
+	python run_market.py prioritize
+
+eval-jd:  ## JD 关键词提取准确率评估（v1.5 验收 2）
+	python eval/jd_extract_eval.py
 
 seed:  ## 生成 seed 数据集
 	python -c "from src.inbox.csv_importer import import_csv; \

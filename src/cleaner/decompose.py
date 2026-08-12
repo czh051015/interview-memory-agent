@@ -8,8 +8,8 @@ product-plan §7.3 定义的处理流程：
 """
 
 import logging
+import re
 from datetime import datetime
-from typing import Optional
 
 from src.llm import chat_json
 from src.cleaner.prompts import DECOMPOSE_SYSTEM
@@ -17,6 +17,14 @@ from src.cleaner.status import infer_status
 from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, DecomposeResult
 
 logger = logging.getLogger(__name__)
+
+# ISSUES E2: 题目含占位符（***、...、略）时记录日志，不推断补全
+_PLACEHOLDER_RE = re.compile(r"(\*{2,}|\.{3,}|略)")
+
+
+def has_placeholder(text: str) -> bool:
+    """题目是否含占位符（*** / ... / 略）。"""
+    return bool(_PLACEHOLDER_RE.search(text))
 
 
 def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
@@ -87,6 +95,10 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
             category = ItemCategory(cat_raw)
         except ValueError:
             category = ItemCategory.KNOWLEDGE
+
+        # ISSUES E2: 占位符题目记录日志
+        if has_placeholder(question):
+            logger.warning("题目含占位符，保留原样未推断: %s", question[:60])
 
         ki = KnowledgeItem(
             id=f"ki_{datetime.utcnow():%Y%m%d}_{i+1:03d}",
