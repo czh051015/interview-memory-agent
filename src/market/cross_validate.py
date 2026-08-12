@@ -62,27 +62,41 @@ def build_market_stats(
     pool_freq = Counter(pool_topics)
     clusters: list[dict] = []  # {"members": set[str], "pool_count": int, "has_jd": bool}
 
-    def _find_cluster(topic: str):
-        for cluster in clusters:
-            if any(_topics_match(topic, m) for m in cluster["members"]):
-                return cluster
-        return None
+    def _find_clusters(topic: str) -> list[dict]:
+        return [
+            cluster for cluster in clusters
+            if any(_topics_match(topic, m) for m in cluster["members"])
+        ]
+
+    def _merge(matches: list[dict]) -> dict:
+        """把所有匹配 cluster 合并进第一个（桥接词如 'Agent' 会同时命中多个）。"""
+        first = matches[0]
+        for extra in matches[1:]:
+            first["members"] |= extra["members"]
+            first["pool_count"] += extra["pool_count"]
+            first["has_jd"] = first["has_jd"] or extra["has_jd"]
+            clusters.remove(extra)
+        return first
 
     # 题库 topic 先聚（pool_count 累加出现次数）
     for topic in pool_topics:
-        cluster = _find_cluster(topic)
-        if cluster is None:
-            cluster = {"members": {topic}, "pool_count": 0, "has_jd": False}
+        matches = _find_clusters(topic)
+        if not matches:
+            cluster = {"members": set(), "pool_count": 0, "has_jd": False}
             clusters.append(cluster)
+            matches = [cluster]
+        cluster = _merge(matches)
         cluster["members"].add(topic)
         cluster["pool_count"] += 1
 
     # JD 关键词后聚（并入已有 cluster 或新建纯 JD cluster）
     for keyword in jd_keywords:
-        cluster = _find_cluster(keyword)
-        if cluster is None:
-            cluster = {"members": {keyword}, "pool_count": 0, "has_jd": False}
+        matches = _find_clusters(keyword)
+        if not matches:
+            cluster = {"members": set(), "pool_count": 0, "has_jd": False}
             clusters.append(cluster)
+            matches = [cluster]
+        cluster = _merge(matches)
         cluster["members"].add(keyword)
         cluster["has_jd"] = True
 

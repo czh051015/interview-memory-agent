@@ -121,6 +121,21 @@ class TestBuildMarketStats:
         assert "向量检索" not in stats["low_freq_topics"]
         assert "向量检索" in stats["jd_required_topics"]
 
+    def test_bridge_keyword_merges_multiple_clusters(self):
+        """回归：JD 关键词 'Agent' 同时命中多个 cluster 时全部合并。
+
+        否则贪心只桥接第一个，'Agent设计' 会被漏掉（E2E 实测发现）。
+        """
+        items = [
+            make_item("Agent记忆"),
+            make_item("Agent设计"),
+            make_item("Agent", source=ItemSource.JD, id_prefix="jd"),
+        ]
+        stats = build_market_stats(items, high_freq_min=2)
+        assert "Agent记忆" in stats["high_freq_topics"]
+        assert "Agent设计" in stats["high_freq_topics"]
+        assert "Agent设计" in stats["jd_required_topics"]
+
     def test_excludes_info_and_jd_from_freq_pool(self):
         """info 类题目和 JD 关键词不计入题库频率。"""
         items = [
