@@ -29,10 +29,22 @@
 
 | # | 优先级 | 描述 | 状态 |
 | --- | --- | --- | --- |
-| E1 | P1 | **unknown 状态催用户补标**：3 条 unknown 仅在日志输出建议，无实际交互 | 🔲 待 v1.5 |
-| E2 | P2 | **部分脱敏文本还原标记**：输入含 `***` 等占位符时，Cleaner 应在日志中记录 | 🔲 待 v1.5 |
-| E3 | P2 | **检索结果按 metadata 排序**：当前仅按相似度，应支持 topic / company / status 组合过滤 + 排序 | 🔲 待 v2 |
+| E1 | P1 | **unknown 状态催用户补标**：3 条 unknown 仅在日志输出建议，无实际交互 | ✅ 已关闭（v1.5）：`src/cleaner/annotate.py` 交互补标 f/p/x，`run_interview.py` 仅 TTY 触发，EOF 安全 |
+| E2 | P2 | **部分脱敏文本还原标记**：输入含 `***` 等占位符时，Cleaner 应在日志中记录 | ✅ 已关闭（v1.5）：`decompose.py has_placeholder()` + warning 日志 |
+| E3 | P2 | **检索结果按 metadata 排序**：当前仅按相似度，应支持 topic / company / status 组合过滤 + 排序 | ✅ 部分达成（v1.5）：`search()` 已支持 topic/company/status/source 组合过滤；按 priority 排序见 `run_market.py prioritize` 复习列表 |
 | E4 | P1 | **余弦阈值校准**：通过 eval 脚本跑出最优阈值 | ✅ 已关闭：`eval/retrieval_eval.py`，5 条标注查询 × 6 个候选阈值 → Recall@5=0.667 稳定 + 噪音归零 → **推荐阈值 0.45**；`search.py` 已更新默认值 |
+
+---
+
+# Issues · v1.5 市场信号（2026-08-12 验收后）
+
+> 验收：20 条网上面经 ✅ · JD 提取 21/21=100% ✅ · 交叉验证 4 道 fail 题 p=1.8 ✅ · source 三枚举过滤 ✅
+
+| # | 严重 | 描述 | 状态 |
+| --- | --- | --- | --- |
+| V1 | 低 | **聚类桥接顺序敏感**：JD 关键词同时命中多个 cluster 只桥接第一个，"Agent设计"fail 题被误降 0.5 | ✅ 已关闭（commit 4e171bf）：命中多个 cluster 时全部合并 |
+| V2 | 低 | **topic 匹配只做精确/包含**：语义相近但拼写无关的 pair 命中不了（"类加载"×"JVM"、"拒绝策略"×"线程池"），相关 fail 题优先级偏保守 | 🔲 待校准：攒够数据后考虑向量相似度匹配 |
+| V3 | 低 | **权重 1.5/0.5/1.2 与高频阈值 N=2 为初值**（计划书风险表） | 🔲 待校准：≥50 条后用 eval 校准 |
 
 ---
 
