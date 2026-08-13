@@ -83,22 +83,6 @@ class TestStats:
         assert stats["hot_topics"][0]["topic"] == "Agent"
         assert stats["hot_topics"][0]["count"] == 2
 
-    @patch("src.memory.knowledge_store.search")
-    def test_stats_excludes_jd_from_wrong_question_pool(self, mock_search):
-        """v1.5: JD 关键词不是"题"，不进 by_status/hot_topics，但计 by_source。"""
-        mock_search.return_value = [
-            KnowledgeItem(id="ki_001", question="Q1", topic="RAG", status=ItemStatus.UNKNOWN),
-            KnowledgeItem(id="jd_001", question="RAG", topic="RAG",
-                          status=ItemStatus.UNKNOWN, source=ItemSource.JD),
-        ]
-
-        import src.memory.knowledge_store as store_mod
-        stats = store_mod.get_stats()
-
-        assert stats["by_source"] == {"self_review": 1, "jd": 1}
-        assert stats["by_status"]["unknown"] == 1  # 只有 ki_001 计入
-        assert stats["hot_topics"] == [{"topic": "RAG", "count": 1}]  # jd 不计入
-
 
 class TestV15Metadata:
     """v1.5 source/priority metadata 往返与存量兼容。"""
@@ -110,10 +94,10 @@ class TestV15Metadata:
     def test_to_metadata_includes_source_priority(self):
         store_mod = self._store_mod()
         item = KnowledgeItem(
-            id="jd_001", question="RAG", topic="RAG", source=ItemSource.JD, priority=1.8,
+            id="jy_001", question="RAG", topic="RAG", source=ItemSource.PUBLIC_JINGYAN, priority=1.8,
         )
         meta = store_mod._to_metadata(item)
-        assert meta["source"] == "jd"
+        assert meta["source"] == "public_jingyan"
         assert meta["priority"] == 1.8
         assert meta["last_reviewed_at"] == ""
 
@@ -148,9 +132,9 @@ class TestV15Metadata:
         store_mod = self._store_mod()
         store_mod._client = None
 
-        store_mod.search(source="jd")
+        store_mod.search(source="public_jingyan")
         mock_collection.get.assert_called_once()
-        assert mock_collection.get.call_args.kwargs["where"] == {"source": "jd"}
+        assert mock_collection.get.call_args.kwargs["where"] == {"source": "public_jingyan"}
 
         # 组合过滤 → $and
         store_mod.search(status="fail", source="self_review")

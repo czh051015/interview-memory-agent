@@ -13,8 +13,7 @@
 
 用法：
   python -m src.market.jingyan_preprocess            # 打印解析摘要
-  python -m src.market.jingyan_preprocess --seed     # 输出可导入的题目列表
-  python -m src.market.jingyan_preprocess --seed | python run_market.py jingyan -
+  python -m src.market.jingyan_preprocess --seed     # 输出归一化去重后的题目列表
 """
 
 from __future__ import annotations
@@ -514,7 +513,7 @@ def to_seed_text(records: list[InterviewRecord], *, per_interview_dedup: bool = 
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI：默认打印摘要；--seed 输出可导入 run_market.py jingyan 的题目列表。"""
+    """CLI：默认打印摘要；--seed 输出归一化去重后的题目列表。"""
     import argparse
 
     parser = argparse.ArgumentParser(

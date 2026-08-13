@@ -88,8 +88,7 @@ def search(
     - similarity_threshold → 语义搜索时，低于此值的条目被丢弃（建议 0.3-0.5）
 
     注意：source 过滤依赖 metadata 里存在 source key。
-    存量旧数据（v1.0 入库）没有该 key，先跑 run_market.py prioritize
-    或 run_interview.py --fresh 重新 upsert 补齐。
+    存量旧数据（v1.0 入库）没有该 key，跑 run_interview.py --fresh 重新 upsert 补齐。
 
     Returns: KnowledgeItem 列表（按相似度降序）
     """
@@ -156,8 +155,7 @@ def get_stats() -> dict:
     for item in items:
         source_count[item.source.value] = source_count.get(item.source.value, 0) + 1
         # ISSUES F2: info 类不计入错题统计
-        # v1.5: JD 关键词不是"题"，不混入错题/热门统计
-        if item.category == "info" or item.source == ItemSource.JD:
+        if item.category == "info":
             continue
         status_count[item.status.value] = status_count.get(item.status.value, 0) + 1
         if item.topic:

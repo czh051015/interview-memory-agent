@@ -26,7 +26,7 @@ else:
     stats = store.get_stats()
     print(f"共 {stats['total']} 题 | fail: {stats['by_status']['fail']} | partial: {stats['by_status']['partial']}")
     print("搜索> 输入关键词  |  :fail :partial :pass  |  :topic 主题名")
-    print("      :source <self_review|public_jingyan|jd>  |  :q 退出")
+    print("      :source <self_review|public_jingyan>  |  :q 退出")
     print()
 
     while True:
@@ -52,15 +52,15 @@ else:
             continue
         if q.startswith(":source "):
             src = q[8:].strip()
-            if src not in ("self_review", "public_jingyan", "jd"):
-                print("  无效来源，可选: self_review / public_jingyan / jd")
+            if src not in ("self_review", "public_jingyan"):
+                print("  无效来源，可选: self_review / public_jingyan")
                 print()
                 continue
             items = store.search(source=src, top_k=10)
             for item in items:
                 print(f"  {fmt_item(item)}")
             if not items:
-                print("  （无结果。存量旧数据可能缺 source 字段，先跑 run_market.py prioritize 补齐）")
+                print("  （无结果。存量旧数据可能缺 source 字段，跑 run_interview.py --fresh 补齐）")
             print()
             continue
         # 语义搜索

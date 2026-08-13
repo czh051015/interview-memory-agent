@@ -6,17 +6,13 @@
   python run_preprocess.py [docx] --seed                # 输出归一化去重后的题目列表（每行一题）
   python run_preprocess.py [docx] --import              # 预处理 + 按面经回填公司/岗位/日期入库
   python run_preprocess.py [docx] --import --limit 10   # 只打印前 10 条
-  python run_preprocess.py [docx] --top                 # Cleaner 打标 + 入库 + 高频考点 Top 榜
-  python run_preprocess.py --view                      # 只读查看当前库 Top 榜（不重跑打标/入库）
 
 选项：
-  --no-dedup   跳过去重（--seed / --import / --top 生效）
+  --no-dedup   跳过去重（--seed / --import 生效）
   --limit N    打印条数上限（--import 生效，默认 20）
-  --top-n N    榜单条数上限（--top / --view 生效，默认 10）
 
 打标+入库复用 src.market.jingyan.import_jingyan（LLM 提 topic + item_meta 回填公司/岗位/日期），
-status=unknown、category=knowledge、source=public_jingyan；Top 榜按 topic 聚类合并频次降序。
-入库后运行 python run_market.py prioritize 计算交叉验证优先级。
+status=unknown、category=knowledge、source=public_jingyan，作为错题本冷启动补给池。
 """
 
 import io
@@ -26,7 +22,6 @@ from pathlib import Path
 
 from src.market import jingyan as jingyan_mod
 from src.market import jingyan_preprocess as preprocess_mod
-from src.market.cross_validate import build_topic_ranking
 from src.memory import knowledge_store as store
 
 # 真实终端/stdout 才包装；pytest 环境直接放行（包装会 GC 关闭原 stdout 缓冲，破坏 pytest 捕获）
@@ -106,7 +101,7 @@ def cmd_summary(records, path: Path) -> int:
 
 
 def cmd_seed(records, *, dedup: bool) -> int:
-    """输出可直接喂给 run_market.py jingyan 的题目列表（每行一题）。"""
+    """输出归一化去重后的题目列表（每行一题）。"""
     for q in preprocess_mod.flatten_questions(records, dedup=dedup):
         print(q)
     return 0
@@ -121,47 +116,9 @@ def cmd_import(records, *, dedup: bool, limit: int | None) -> int:
 
     print(f"入库 {len(items)} 条（source=public_jingyan，按面经回填公司/岗位/日期）:")
     _print_items(items, limit=limit or 20)
-    print("\n提示: 运行 python run_market.py prioritize 计算交叉验证优先级")
     return 0
 
 
-def _print_top_board(ranking: list[dict], *, top_n: int,
-                 label: str = "题库=本次入库 public_jingyan") -> None:
-    """打印高频考点 Top 榜：topic、题目数、覆盖公司与公司数。"""
-    if not ranking:
-        print("  无 topic 数据（LLM 提 topic 失败或全部为空）")
-        return
-    print(f"\n📊 高频考点 Top 榜（{label}，按出现题目数降序）:")
-    for i, row in enumerate(ranking[:top_n], 1):
-        companies = "、".join(row["companies"]) or "（未标注公司）"
-        roles = "、".join(row["roles"]) or "（未标注岗位）"
-        print(f"  {i:>2}. {row['topic']}  {row['count']} 题")
-        print(f"      [公司 {row['company_count']} 家: {companies} ｜ 岗位 {row['role_count']} 类: {roles}]")
-
-
-def cmd_top(records, *, dedup: bool, top_n: int = 10) -> int:
-    """Cleaner 打标 + 入库 + 高频考点 Top 榜（source=public_jingyan）。"""
-    items = _import_and_store(records, dedup=dedup)
-    if not items:
-        print("未解析出题目")
-        return 1
-
-    ranking = build_topic_ranking(items, top_n=top_n)
-    print(f"入库 {len(items)} 条（source=public_jingyan，status=unknown，category=knowledge）")
-    _print_top_board(ranking, top_n=top_n)
-    print("\n提示: 运行 python run_market.py prioritize 计算交叉验证优先级")
-    return 0
-
-
-def cmd_view(*, top_n: int = 10) -> int:
-    """只读：从知识库现有 public_jingyan 数据打印 Top 榜（不重跑打标/入库）。"""
-    items = store.search(source="public_jingyan", top_k=1000)
-    if not items:
-        print("知识库没有 public_jingyan 数据，先运行 python run_preprocess.py --top 导入")
-        return 1
-    ranking = build_topic_ranking(items, top_n=top_n)
-    _print_top_board(ranking, top_n=top_n, label=f"public_jingyan {len(items)} 条，只读未改库")
-    return 0
 def main(argv: list[str] | None = None) -> int:
     args = list(argv) if argv is not None else sys.argv[1:]
     if args and args[0] in ("-h", "--help"):
@@ -171,11 +128,8 @@ def main(argv: list[str] | None = None) -> int:
     docx_arg: str | None = None
     do_seed = False
     do_import = False
-    do_top = False
-    do_view = False
     dedup = True
     limit: int | None = None
-    top_n: int = 10
 
     it = iter(args)
     for arg in it:
@@ -183,10 +137,6 @@ def main(argv: list[str] | None = None) -> int:
             do_seed = True
         elif arg == "--import":
             do_import = True
-        elif arg == "--top":
-            do_top = True
-        elif arg == "--view":
-            do_view = True
         elif arg == "--no-dedup":
             dedup = False
         elif arg == "--limit":
@@ -201,18 +151,6 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError:
                 print("--limit 需要数字参数")
                 return 1
-        elif arg == "--top-n":
-            try:
-                top_n = int(next(it))
-            except (StopIteration, ValueError):
-                print("--top-n 需要数字参数")
-                return 1
-        elif arg.startswith("--top-n="):
-            try:
-                top_n = int(arg.split("=", 1)[1])
-            except ValueError:
-                print("--top-n 需要数字参数")
-                return 1
         elif arg.startswith("-"):
             print(f"未知参数: {arg}")
             return 1
@@ -222,17 +160,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             docx_arg = arg
 
-    if do_view:
-        return cmd_view(top_n=top_n)
-
     path = Path(docx_arg) if docx_arg else preprocess_mod.DEFAULT_DOCX
     if not path.exists():
         print(f"文件不存在: {path}")
         return 1
 
     records = preprocess_mod.preprocess_docx(path, dedup=dedup)
-    if do_top:
-        return cmd_top(records, dedup=dedup, top_n=top_n)
     if do_import:
         return cmd_import(records, dedup=dedup, limit=limit)
     if do_seed:

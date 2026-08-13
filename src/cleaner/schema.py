@@ -19,10 +19,9 @@ class ItemCategory(str, Enum):
 
 
 class ItemSource(str, Enum):
-    """数据来源三枚举（phase-2-plan §2.3）。"""
+    """数据来源二枚举：自己的复盘 / 网上面经。"""
     SELF_REVIEW = "self_review"          # 自己的面试复盘
     PUBLIC_JINGYAN = "public_jingyan"    # 网上面经（只有题目，无自评）
-    JD = "jd"                            # 目标公司 JD 技能关键词
 
 
 class KnowledgeItem(BaseModel):
