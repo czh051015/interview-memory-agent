@@ -1,7 +1,7 @@
 # OfferLoop Makefile
 # v1.0 — 常用命令快捷入口
 
-.PHONY: help install dev-install test lint cov clean demo-empty run-all eval run-webhook run-approval market-jingyan market-jd market-prioritize eval-jd
+.PHONY: help install dev-install test lint cov clean demo-empty run-all eval run-webhook run-approval market-jingyan market-jd market-prioritize eval-jd preprocess preprocess-import
 
 help:  ## 显示帮助信息
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -66,6 +66,15 @@ market-prioritize:  ## 交叉验证重算优先级 + 复习列表（v1.5）
 eval-jd:  ## JD 关键词提取准确率评估（v1.5 验收 2）
 	python eval/jd_extract_eval.py
 
+preprocess:  ## docx 面经预处理摘要（20 份面经 + 公司/岗位/日期）
+	python run_preprocess.py
+
+preprocess-import:  ## docx 面经预处理 + 入库（source=public_jingyan，带元信息）
+	python run_preprocess.py --import
+
+preprocess-top:  ## docx 面经预处理 + Cleaner 打标入库 + 高频考点 Top 榜
+	python run_preprocess.py --top
+
 seed:  ## 生成 seed 数据集
 	python -c "from src.inbox.csv_importer import import_csv; \
 		import json; \
@@ -74,3 +83,4 @@ seed:  ## 生成 seed 数据集
 
 docs-copy:  ## 复制架构文档到 docs/
 	cp ai-*.md docs/ 2>/dev/null || echo "No ai-*.md files to copy"
+

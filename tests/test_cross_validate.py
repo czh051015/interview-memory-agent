@@ -11,13 +11,15 @@ from src.cleaner.schema import (
 from src.market.cross_validate import (
     _topics_match,
     build_market_stats,
+    build_topic_ranking,
     adjust_priority,
     apply_priorities,
 )
 
 
 def make_item(topic: str, *, status=ItemStatus.FAIL, source=ItemSource.SELF_REVIEW,
-              category=ItemCategory.KNOWLEDGE, id_prefix="ki") -> KnowledgeItem:
+              category=ItemCategory.KNOWLEDGE, id_prefix="ki", company: str = "",
+              role: str = "") -> KnowledgeItem:
     return KnowledgeItem(
         id=f"{id_prefix}_t_{abs(hash(topic)) % 1000:03d}",
         question=f"题目 {topic}",
@@ -25,6 +27,8 @@ def make_item(topic: str, *, status=ItemStatus.FAIL, source=ItemSource.SELF_REVI
         category=category,
         status=status,
         source=source,
+        company=company,
+        role=role,
     )
 
 
@@ -84,6 +88,11 @@ class TestTopicsMatch:
     def test_no_match(self):
         assert not _topics_match("RAG", "线程池")
         assert not _topics_match("", "RAG")
+
+    def test_whitespace_insensitive(self):
+        # "Prompt 工程"（JD 原文带空格）与 "Prompt工程"（清洗后）视为同一 topic
+        assert _topics_match("Prompt 工程", "Prompt工程")
+        assert _topics_match("R A G", "RAG")
 
 
 class TestBuildMarketStats:
@@ -163,3 +172,67 @@ class TestApplyPriorities:
         items = [make_item("RAG"), make_item("死锁"), make_item("合并数组")]
         result = apply_priorities(items, STATS)
         assert [round(r.priority, 2) for r in result] == [1.8, 0.5, 1.0]
+
+
+
+class TestBuildTopicRanking:
+    """高频考点榜：聚类合并 / 题库口径 / 排序 / top_n。"""
+
+    def test_merges_spellings_and_counts_companies(self):
+        items = [
+            make_item("RAG", company="腾讯", role="AI应用开发"),
+            make_item("RAG", company="腾讯", role="AI应用开发"),
+            make_item("RAG检索增强", company="字节", role="AI应用工程师"),
+            make_item("线程池", company="字节"),
+        ]
+        ranking = build_topic_ranking(items)
+        assert ranking[0]["topic"] == "RAG"  # 出现最多的拼写作展示名
+        assert ranking[0]["count"] == 3
+        assert ranking[0]["company_count"] == 2
+        assert set(ranking[0]["companies"]) == {"腾讯", "字节"}
+        assert ranking[0]["role_count"] == 2
+        assert set(ranking[0]["roles"]) == {"AI应用开发", "AI应用工程师"}
+        assert ranking[1]["topic"] == "线程池"
+        assert ranking[1]["count"] == 1
+        assert ranking[1]["companies"] == ["字节"]
+
+    def test_filters_jd_info_and_empty_topic(self):
+        items = [
+            make_item("RAG"),
+            make_item("RAG", source=ItemSource.JD),       # JD 关键词不是"题"
+            make_item("RAG", category=ItemCategory.INFO),  # info 类不计入
+            KnowledgeItem(id="x_empty", question="q", topic="", source=ItemSource.PUBLIC_JINGYAN),
+        ]
+        ranking = build_topic_ranking(items)
+        assert len(ranking) == 1
+        assert ranking[0]["topic"] == "RAG"
+        assert ranking[0]["count"] == 1
+
+    def test_public_jingyan_included(self):
+        ranking = build_topic_ranking(
+            [make_item("RAG", source=ItemSource.PUBLIC_JINGYAN, company="FOSHO")]
+        )
+        assert len(ranking) == 1
+        assert ranking[0]["count"] == 1
+        assert ranking[0]["companies"] == ["FOSHO"]
+
+    def test_sorted_by_count_desc_then_topic(self):
+        items = [make_item("低频"), make_item("高频"), make_item("高频")]
+        assert [r["topic"] for r in build_topic_ranking(items)] == ["高频", "低频"]
+        # 并列按 topic 字典序
+        tie = build_topic_ranking([make_item("B题"), make_item("A题")])
+        assert [r["topic"] for r in tie] == ["A题", "B题"]
+
+    def test_top_n(self):
+        items = [make_item(t) for t in ["A", "A", "B", "C", "D"]]
+        assert len(build_topic_ranking(items, top_n=2)) == 2
+
+    def test_role_dimension_filters_empty(self):
+        """岗位维度：非空 role 才计入，榜单行带 roles/role_count。"""
+        ranking = build_topic_ranking([
+            make_item("RAG", company="腾讯", role="AI应用开发"),
+            make_item("RAG", company="字节", role=""),  # 空 role 不计入
+        ])
+        row = ranking[0]
+        assert row["role_count"] == 1
+        assert row["roles"] == ["AI应用开发"]

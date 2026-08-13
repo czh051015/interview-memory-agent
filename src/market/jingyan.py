@@ -54,11 +54,10 @@ def _extract_topics(questions: list[str], offset: int = 0) -> dict[int, str]:
         offset: index 起始偏移（分块时全局递增）
 
     Returns:
-        {原始题目位置: topic}；LLM 失败或 index 缺失的题目不进 dict
+        {全局题目位置(0 起): topic}；LLM 失败或 index 缺失的题目不进 dict。
+        分块时返回全局下标（index-1），多块 update 合并不会互相覆盖。
     """
-    numbered = "\n".join(
-        f"[{offset + i + 1}] {q}" for i, q in enumerate(questions)
-    )
+    numbered = "\n".join(f"[{offset + i + 1}] {q}" for i, q in enumerate(questions))
     try:
         result = chat_json(
             system_prompt=JINGYAN_TOPIC_SYSTEM,
@@ -81,16 +80,28 @@ def _extract_topics(questions: list[str], offset: int = 0) -> dict[int, str]:
         if index < offset + 1 or index > offset + len(questions):
             logger.warning("Topic index out of range ignored: %d", index)
             continue
-        if (index - offset - 1) in topics:
+        pos = index - 1  # 全局 0-based，分块合并不冲突（修复 >40 题多块覆盖 bug）
+        if pos in topics:
             logger.warning("Duplicate topic index ignored: %d", index)
             continue
-        topics[index - offset - 1] = topic
+        topics[pos] = topic
 
     return topics
 
 
-def import_jingyan(text: str) -> list[KnowledgeItem]:
+def import_jingyan(
+    text: str,
+    *,
+    item_meta: dict[int, dict[str, str]] | None = None,
+) -> list[KnowledgeItem]:
     """把网上面经文本导入为 KnowledgeItem 列表（不入库，由调用方存储）。
+
+    Args:
+        text: 网上面经文本，每行一题（`#` 注释/空行/分隔线会跳过）。
+        item_meta: 可选，按题目下标（0 起）附带的面经元信息，例如
+            {0: {"company": "腾讯", "role": "AI应用开发", "date": "2026-07-25"}}。
+            由 jingyan_preprocess 的 InterviewRecord 回填（company/role/date/round）；
+            未提供或缺失的下标沿用默认值（role 默认 "AI应用开发"）。
 
     降级策略：LLM 提 topic 失败时 topic 置空，照常导入——题目本身仍有价值，
     且验收只要求 status=unknown、category=knowledge。
@@ -102,19 +113,25 @@ def import_jingyan(text: str) -> list[KnowledgeItem]:
     # 分块提 topic（每块一次 LLM 调用，index 全局递增）
     topics: dict[int, str] = {}
     for start in range(0, len(questions), _CHUNK_SIZE):
-        chunk = questions[start:start + _CHUNK_SIZE]
+        chunk = questions[start : start + _CHUNK_SIZE]
         topics.update(_extract_topics(chunk, offset=start))
 
+    meta_by_index = item_meta or {}
     items = []
     for i, q in enumerate(questions):
         # 幂等 id：同一题目重复导入 = upsert 覆盖
         qid = hashlib.md5(q.encode("utf-8")).hexdigest()[:8]
+        meta = meta_by_index.get(i) or {}
         items.append(
             KnowledgeItem(
                 id=f"jy_{qid}",
                 question=q,
                 topic=topics.get(i, ""),
                 category=ItemCategory.KNOWLEDGE,
+                company=meta.get("company", ""),
+                role=meta.get("role") or "AI应用开发",
+                round=meta.get("round", ""),
+                date=meta.get("date", ""),
                 status=ItemStatus.UNKNOWN,
                 source=ItemSource.PUBLIC_JINGYAN,
                 created_at=datetime.utcnow(),
@@ -123,6 +140,7 @@ def import_jingyan(text: str) -> list[KnowledgeItem]:
 
     logger.info(
         "Imported %d jingyan questions, %d with topic",
-        len(items), len(topics),
+        len(items),
+        len(topics),
     )
     return items

@@ -68,5 +68,55 @@ class TestImportJingyan:
         assert ids1 == ids2
         assert all(i.startswith("jy_") for i in ids1)
 
+    @patch("src.market.jingyan.chat_json")
+    def test_item_meta_fills_company_role_date(self, mock_chat):
+        """item_meta 按题目下标回填公司/岗位/日期，缺省下标沿用默认。"""
+        mock_chat.return_value = {"topics": []}
+        items = import_jingyan(
+            "题一\n题二",
+            item_meta={
+                0: {"company": "腾讯", "role": "AI应用开发", "date": "2026-07-25"},
+            },
+        )
+        assert items[0].company == "腾讯"
+        assert items[0].role == "AI应用开发"
+        assert items[0].date == "2026-07-25"
+        assert items[1].company == ""
+        assert items[1].date == ""
+        assert items[1].role == "AI应用开发"  # schema 默认值
+
+    @patch("src.market.jingyan.chat_json")
+    def test_item_meta_keeps_defaults_when_absent(self, mock_chat):
+        """不传 item_meta：company/date 为空，role 用 schema 默认。"""
+        mock_chat.return_value = {"topics": []}
+        items = import_jingyan("题一")
+        assert items[0].company == ""
+        assert items[0].date == ""
+        assert items[0].round == ""
+        assert items[0].role == "AI应用开发"
+
+    @patch("src.market.jingyan.chat_json")
+    def test_item_meta_out_of_range_ignored(self, mock_chat):
+        """超出题目数量的下标被忽略，不影响正常导入。"""
+        mock_chat.return_value = {"topics": []}
+        items = import_jingyan("题一", item_meta={9: {"company": "不存在"}})
+        assert len(items) == 1
+        assert items[0].company == ""
+
     def test_empty_text(self):
         assert import_jingyan("") == []
+
+    @patch("src.market.jingyan.chat_json")
+    def test_multi_chunk_topic_mapping(self, mock_chat):
+        """分块提 topic：>40 题时各块返回全局下标，合并不互相覆盖（回归）。"""
+        questions = [f"第{i}题" for i in range(1, 46)]  # 2 块：40 + 5
+        mock_chat.side_effect = [
+            {"topics": [{"index": i, "topic": f"块A-{i}"} for i in range(1, 41)]},
+            {"topics": [{"index": i, "topic": f"块B-{i}"} for i in range(41, 46)]},
+        ]
+        items = import_jingyan("\n".join(questions))
+        assert len(items) == 45
+        assert items[0].topic == "块A-1"
+        assert items[39].topic == "块A-40"
+        assert items[40].topic == "块B-41"  # 旧实现第二块覆盖第一块 → 40 题前会串 topic
+        assert items[44].topic == "块B-45"
