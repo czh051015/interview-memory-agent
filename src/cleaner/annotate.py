@@ -6,6 +6,7 @@ prompt_fn 注入便于测试；非交互环境不调用本模块。
 """
 
 import logging
+from datetime import datetime
 from src.cleaner.schema import KnowledgeItem, ItemStatus
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ def annotate_unknown(
     prompt_fn,
     *,
     max_retries: int = 3,
+    now: datetime | None = None,
 ) -> list[KnowledgeItem]:
     """对 status=unknown 的条目逐条补标，返回新列表（不改输入）。
 
@@ -28,10 +30,12 @@ def annotate_unknown(
         items: 拆解结果
         prompt_fn: 输入函数（如 builtins.input），返回用户输入字符串
         max_retries: 非法输入重试次数，超过则保持 unknown
+        now: 标注时间（标 fail/partial 时写入 last_reviewed_at，作为衰减起点）
 
     Returns:
         补标后的 KnowledgeItem 列表
     """
+    now = now or datetime.utcnow()
     unknown_items = [item for item in items if item.status == ItemStatus.UNKNOWN]
     if not unknown_items:
         return list(items)
@@ -65,7 +69,10 @@ def annotate_unknown(
             new_status = status_updates.get(idx)
             if new_status is not None:
                 logger.info("Annotated %s: unknown → %s", item.id, new_status.value)
-                updated.append(item.model_copy(update={"status": new_status}))
+                updated.append(item.model_copy(update={
+                    "status": new_status,
+                    "last_reviewed_at": now,  # 标记不会/半会 = 新的衰减起点
+                }))
                 continue
         updated.append(item)
 

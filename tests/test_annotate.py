@@ -1,7 +1,10 @@
 """ISSUES E1：unknown 条目交互补标测试。"""
 
+from datetime import datetime, timedelta
+
 from src.cleaner.schema import KnowledgeItem, ItemStatus
 from src.cleaner.annotate import annotate_unknown
+from src.memory.mastery import rank
 
 
 def make_items(statuses):
@@ -61,3 +64,28 @@ class TestAnnotateUnknown:
         result = annotate_unknown(items, prompt_fn=prompt)
         assert items[0].status == ItemStatus.UNKNOWN
         assert result[0].status == ItemStatus.FAIL
+
+    def test_annotate_sets_last_reviewed_at(self):
+        """标 fail/partial 时写入 last_reviewed_at 作为衰减起点；x 跳过则不设。"""
+        now = datetime(2026, 8, 13, 12, 0, 0)
+        items = make_items([ItemStatus.UNKNOWN, ItemStatus.UNKNOWN])
+        prompt = FakePrompt(["f", "x"])
+        result = annotate_unknown(items, prompt_fn=prompt, now=now)
+        assert result[0].status == ItemStatus.FAIL
+        assert result[0].last_reviewed_at == now          # 标 fail 设了衰减起点
+        assert result[1].last_reviewed_at is None          # x 跳过的不设
+
+    def test_annotated_fail_enters_rank(self):
+        """闭环：刚标 fail 的题（0 天）比 3 天前 fail 的题更新鲜，排后面。"""
+        now = datetime(2026, 8, 13, 12, 0, 0)
+        items = make_items([ItemStatus.UNKNOWN])
+        prompt = FakePrompt(["f"])
+        [item] = annotate_unknown(items, prompt_fn=prompt, now=now)
+
+        older = KnowledgeItem(
+            id="ki_old", question="旧题", status=ItemStatus.FAIL,
+            last_reviewed_at=now - timedelta(days=3),
+        )
+        ranked = rank([older, item], now=now)
+        # 3 天前的 fail recency 更高（更该复习），应排前面
+        assert ranked[0].id == "ki_old"
