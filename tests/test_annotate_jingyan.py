@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemSource
+from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemSource, ItemCategory
 
 
 class FakePrompt:
@@ -53,3 +53,27 @@ def test_no_unknown_returns_without_write():
 
     assert rc == 0
     mock_store.assert_not_called()
+
+
+def test_filters_out_info_category():
+    """info 类（行为题）不进待标注队列，只标 knowledge 题。"""
+    items = [
+        make_item("jy_1", "RRF 重排序原理"),  # category 默认 knowledge
+        KnowledgeItem(
+            id="jy_2", question="请用两分钟介绍一下自己", topic="自我介绍",
+            source=ItemSource.PUBLIC_JINGYAN, status=ItemStatus.UNKNOWN,
+            category=ItemCategory.INFO,
+        ),
+    ]
+    prompt = FakePrompt(["f"])  # 只有 knowledge 那条会被问到
+
+    with patch("src.memory.knowledge_store.search", return_value=items), \
+         patch("src.memory.knowledge_store.store_items") as mock_store, \
+         patch("builtins.input", prompt):
+        import annotate_jingyan
+        rc = annotate_jingyan.main([])
+
+    assert rc == 0
+    written = mock_store.call_args[0][0]
+    assert len(written) == 1  # info 题被过滤，只写回 knowledge 题
+    assert written[0].question == "RRF 重排序原理"

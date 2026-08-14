@@ -69,8 +69,9 @@
 
 | # | 严重 | 描述 | 证据 | 修法方向 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| V4 | 高 | **去重失效**：同一条文本重复入库，高频统计虚高 | `search.py RAG` 返回 3 条完全相同 `RAG (RAG) [jd]`，sim=1.00 | 预处理加去重：文本规范化 + hash/相似度，跨 source 也要去重（尤其 JD） | 🔲 待修 |
-| V5 | 高 | **JD 关键词与面经题目混池**：JD 的"RAG"（技能关键词）被当题目入库，与面经题混算 | 搜 RAG 前 3 条全是无意义 `RAG [jd]`，挤掉真正的面经题 | 数据源分池：JD 提取成"技能标签"，面经才拆"题目"，两个 collection 分开统计 | 🔲 待修 |
-| V6 | 中 | **流程/行为题混入考点榜**：category 未区分技术考点 vs 行为流程 | Top 榜第 4"自我介绍"、第 5"项目介绍" | topic 分类法加 category 层（技术/行为/流程/信息），Top 榜只统计技术类 | 🔲 待修 |
-| V7 | 中 | **topic 粒度碎，聚合失效**：326 条数据 342 topics / 271 clusters，几乎一条一簇 | `run_market.py` 日志 `342 pool topics, 271 clusters` | 定固定 topic 分类法（10~15 大类），Cleaner 从枚举选而非自由发挥 | 🔲 待修 |
-| V8 | 低 | **嵌入又逐条调用（B1 复发）**：market 模块未复用批量 embed | 10 次 `POST /api/embed` 一次一条 | market 模块复用 memory 的批量 `embed_texts` | 🔲 待修 |
+| V4 | 高 | **去重失效**：同一条文本重复入库，高频统计虚高 | `search.py RAG` 返回 3 条完全相同 `RAG (RAG) [jd]`，sim=1.00 | 预处理加去重：文本规范化 + hash/相似度 | ✅ 已作废（JD 代码已删，去重由 jingyan_preprocess 承担） |
+| V5 | 高 | **JD 关键词与面经题目混池**：JD 的"RAG"（技能关键词）被当题目入库 | 搜 RAG 前 3 条全是无意义 `RAG [jd]` | 数据源分池 | ✅ 已作废（JD 数据源已删） |
+| V6 | 中 | **流程/行为题混入考点榜**：category 未区分技术考点 vs 行为流程 | Top 榜第 4"自我介绍" | topic 分类法加 category 层 | ✅ 已关闭（见 V9，面经导入补 category 分类） |
+| V7 | 中 | **topic 粒度碎，聚合失效**：326 条数据 342 topics，几乎一条一簇 | `run_market.py` 日志 `342 pool topics, 271 clusters` | 定固定 topic 分类法 | ✅ 已作废（考点榜删除，topic 只用于浏览不再统计） |
+| V8 | 低 | **嵌入又逐条调用（B1 复发）**：market 模块未复用批量 embed | 10 次 `POST /api/embed` 一次一条 | 复用批量 embed | ✅ 已关闭（store_items 批量 embed，import 实测 12 次分批非逐条） |
+| V9 | 中 | **面经导入 category 写死 KNOWLEDGE**：行为/信息题（自我介绍/薪酬/实习计划）混进待标注队列，干扰错题标注 | `run_preprocess.py --import` 输出混入"自我介绍""薪酬期望" | LLM 提 topic 时同时判 category（knowledge/info），annotate_jingyan 过滤 info 类 | ✅ 已关闭（2026-08-14） |

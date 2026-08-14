@@ -18,7 +18,7 @@ import io
 import logging
 import sys
 
-from src.cleaner.schema import ItemStatus
+from src.cleaner.schema import ItemStatus, ItemCategory
 from src.cleaner.annotate import annotate_unknown
 from src.memory import knowledge_store as store
 
@@ -38,10 +38,11 @@ def main(argv: list[str] | None = None) -> int:
         print(__doc__)
         return 0
 
-    # 1. 检索面经里的 unknown 题（source + status 组合过滤）
+    # 1. 检索面经里的 unknown 题，只标知识点（category=knowledge），过滤 info 类行为题
     items = store.search(source="public_jingyan", status="unknown", top_k=1000)
+    items = [item for item in items if item.category == ItemCategory.KNOWLEDGE]
     if not items:
-        print("没有待标注的面经题（source=public_jingyan + status=unknown）")
+        print("没有待标注的知识点面经题（source=public_jingyan + status=unknown + category=knowledge）")
         print("先运行: python run_preprocess.py --import 导入面经题")
         return 0
 

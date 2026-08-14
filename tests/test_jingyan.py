@@ -120,3 +120,23 @@ class TestImportJingyan:
         assert items[39].topic == "块A-40"
         assert items[40].topic == "块B-41"  # 旧实现第二块覆盖第一块 → 40 题前会串 topic
         assert items[44].topic == "块B-45"
+
+    @patch("src.market.jingyan.chat_json")
+    def test_category_classification(self, mock_chat):
+        """LLM 输出 category 时，info 类被正确标记。"""
+        mock_chat.return_value = {"topics": [
+            {"index": 1, "topic": "线程池", "category": "knowledge"},
+            {"index": 2, "topic": "自我介绍", "category": "info"},
+        ]}
+        items = import_jingyan("线程池参数？\n自我介绍")
+        assert items[0].category == ItemCategory.KNOWLEDGE
+        assert items[1].category == ItemCategory.INFO
+
+    @patch("src.market.jingyan.chat_json")
+    def test_category_invalid_falls_back_to_knowledge(self, mock_chat):
+        """非法 category 回退 knowledge。"""
+        mock_chat.return_value = {"topics": [
+            {"index": 1, "topic": "线程池", "category": "奇怪值"},
+        ]}
+        items = import_jingyan("线程池参数？")
+        assert items[0].category == ItemCategory.KNOWLEDGE
