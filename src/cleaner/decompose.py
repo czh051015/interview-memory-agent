@@ -15,6 +15,7 @@ from src.llm import chat_json
 from src.cleaner.prompts import DECOMPOSE_SYSTEM
 from src.cleaner.status import infer_status
 from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, DecomposeResult
+from src.cleaner.state_machine import record_birth
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
         # LLM 推断的 status
         llm_status = item_data.get("status", "unknown")
         user_note = (item_data.get("user_note") or "").strip()
+        from_rule = False  # status 来源：False=LLM 推断，True=规则兜底
 
         # 规则层兜底：LLM 返回 unknown 的，规则再判断一次
         if llm_status == "unknown" and user_note:
@@ -78,6 +80,7 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
             if rule_status != ItemStatus.UNKNOWN:
                 logger.debug("Rule override: '%s' → %s", user_note[:30], rule_status.value)
                 final_status = rule_status
+                from_rule = True
             else:
                 final_status = ItemStatus.UNKNOWN
         else:
@@ -112,6 +115,12 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
             status=final_status,
             user_note=user_note,
             created_at=datetime.utcnow(),
+        )
+        # 记出生证据（from=null），来源可追溯：LLM 推断 or 规则兜底
+        ki = record_birth(
+            ki,
+            reason="规则推断" if from_rule else "LLM 推断",
+            actor="decompose",
         )
         items.append(ki)
 

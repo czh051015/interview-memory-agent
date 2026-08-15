@@ -27,14 +27,29 @@ class FakePrompt:
 
 
 class TestAnnotateUnknown:
-    def test_f_p_x_mapping(self):
-        items = make_items([ItemStatus.UNKNOWN, ItemStatus.UNKNOWN, ItemStatus.UNKNOWN])
-        prompt = FakePrompt(["f", "p", "x"])
+    def test_f_p_g_x_mapping(self):
+        items = make_items([ItemStatus.UNKNOWN] * 4)
+        prompt = FakePrompt(["f", "p", "g", "x"])
         result = annotate_unknown(items, prompt_fn=prompt)
         assert result[0].status == ItemStatus.FAIL
         assert result[1].status == ItemStatus.PARTIAL
-        assert result[2].status == ItemStatus.UNKNOWN
-        assert prompt.calls == 3
+        assert result[2].status == ItemStatus.PASS
+        assert result[3].status == ItemStatus.UNKNOWN
+        assert prompt.calls == 4
+
+    def test_annotate_records_evidence(self):
+        """标注走状态机，留下 {time,from,to,reason,actor} 证据。"""
+        now = datetime(2026, 8, 13, 12, 0, 0)
+        items = make_items([ItemStatus.UNKNOWN])
+        prompt = FakePrompt(["f"])
+        [out] = annotate_unknown(items, prompt_fn=prompt, now=now)
+        assert out.history == [{
+            "time": now.isoformat(),
+            "from": "unknown",
+            "to": "fail",
+            "reason": "人工标注：不会",
+            "actor": "annotate",
+        }]
 
     def test_only_unknown_items_are_prompted(self):
         items = make_items([ItemStatus.FAIL, ItemStatus.UNKNOWN])

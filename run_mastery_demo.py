@@ -51,7 +51,7 @@ print(f"  复习后：有效掌握度={effective_mastery(item, now=NOW):.3f}, "
 
 print()
 print("=" * 60)
-print("场景 3｜验收 3：三元召回排序（谁最该复习谁排前）")
+print("场景 3｜验收 3：双因子召回排序（谁最该复习谁排前）")
 print("=" * 60)
 candidates = [
     make_item("ki_a", "Chroma vs Milvus", ItemStatus.FAIL, days_since_review=8),   # 8 天没复习

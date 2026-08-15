@@ -1,4 +1,4 @@
-"""掌握度衰减 / 复习重置 / 三元召回排序测试（phase-2-plan §3.5 验收 1~3）。"""
+"""掌握度衰减 / 复习重置 / 双因子召回排序测试（phase-2-plan §3.5 验收 1~3）。"""
 
 from datetime import datetime, timedelta
 
@@ -144,6 +144,21 @@ class TestRank:
         b = make_item(id="b", reviewed_at=NOW - timedelta(days=1))
         ranked = rank([a, b], now=NOW)
         assert [it.id for it in ranked] == ["a", "b"]
+
+    def test_low_mastery_outranks_stale(self):
+        """掌握度缺口优先于时间：mastery 低的题更该复习，即使另一题更久没复习。"""
+        low = make_item(id="a", mastery=0.3, reviewed_at=NOW)               # 掌握度 0.3，刚复习
+        stale = make_item(id="b", mastery=1.0, reviewed_at=NOW - timedelta(days=8))  # 8 天没复习但掌握度 1.0
+        ranked = rank([stale, low], now=NOW)
+        assert ranked[0].id == "a"
+
+    def test_reviewed_fail_sinks_below_partial(self):
+        """复习到会的 fail 题（mastery=1 刚复习）不再碾压遗忘的 partial 题。"""
+        reviewed_fail = make_item(id="a", status=ItemStatus.FAIL, reviewed_at=NOW)
+        stale_partial = make_item(id="b", status=ItemStatus.PARTIAL,
+                                  reviewed_at=NOW - timedelta(days=8))
+        ranked = rank([reviewed_fail, stale_partial], now=NOW)
+        assert ranked[0].id == "b"
 
 
 class TestEffectiveMastery:

@@ -35,6 +35,7 @@ class KnowledgeItem(BaseModel):
     round: str = Field(default="", description="技术一面/二面/HR面")
     date: str = Field(default="", description="面试日期 YYYY-MM-DD")
     status: ItemStatus = ItemStatus.UNKNOWN
+    history: list[dict] = Field(default_factory=list, description="状态变更证据链 [{time,from,to,reason,actor}]")
     user_note: str = Field(default="", description="用户原始备注")
     mastery_score: float = Field(default=1.0, ge=0.0, le=1.0)
     last_reviewed_at: Optional[datetime] = None

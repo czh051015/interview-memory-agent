@@ -1,5 +1,6 @@
 """KnowledgeItem 专用存储 —— 写入 Chroma + 按维度检索。"""
 
+import json
 import logging
 from datetime import datetime
 from typing import Optional
@@ -198,6 +199,7 @@ def _to_metadata(item: KnowledgeItem) -> dict:
         "last_reviewed_at": item.last_reviewed_at.isoformat() if item.last_reviewed_at else "",
         "review_count": item.review_count,
         "created_at": item.created_at.isoformat() if item.created_at else "",
+        "history": json.dumps(item.history, ensure_ascii=False),
     }
 
 
@@ -247,6 +249,12 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
 
         last_reviewed = meta.get("last_reviewed_at", "")
 
+        # 证据链：老数据无 history key → 默认空 list
+        try:
+            history = json.loads(meta.get("history", "[]"))
+        except (TypeError, ValueError):
+            history = []
+
         item = KnowledgeItem(
             id=item_id,
             question=meta.get("question", doc),
@@ -257,6 +265,7 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
             round=meta.get("round", ""),
             date=meta.get("date", ""),
             status=status,
+            history=history,
             user_note=meta.get("user_note", ""),
             mastery_score=float(meta.get("mastery_score", 1.0)),
             review_count=int(meta.get("review_count", 0)),
