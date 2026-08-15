@@ -30,7 +30,6 @@ class TestKnowledgeItem:
         assert item.status == ItemStatus.UNKNOWN
         assert item.mastery_score == 1.0
         assert item.review_count == 0
-        assert item.related_items == []
 
 
 class TestDecomposeResult:

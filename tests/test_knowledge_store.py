@@ -85,24 +85,23 @@ class TestStats:
 
 
 class TestV15Metadata:
-    """v1.5 source/priority metadata 往返与存量兼容。"""
+    """v1.5 source metadata 往返与存量兼容。"""
 
     def _store_mod(self):
         import src.memory.knowledge_store as store_mod
         return store_mod
 
-    def test_to_metadata_includes_source_priority(self):
+    def test_to_metadata_includes_source(self):
         store_mod = self._store_mod()
         item = KnowledgeItem(
-            id="jy_001", question="RAG", topic="RAG", source=ItemSource.PUBLIC_JINGYAN, priority=1.8,
+            id="jy_001", question="RAG", topic="RAG", source=ItemSource.PUBLIC_JINGYAN,
         )
         meta = store_mod._to_metadata(item)
         assert meta["source"] == "public_jingyan"
-        assert meta["priority"] == 1.8
         assert meta["last_reviewed_at"] == ""
 
     def test_parse_results_defaults_old_data(self):
-        """v1.0 存量记录没有 source/priority key → 回退 self_review / 1.0。"""
+        """v1.0 存量记录没有 source key → 回退 self_review。"""
         store_mod = self._store_mod()
         results = {
             "ids": ["ki_old"],
@@ -117,7 +116,6 @@ class TestV15Metadata:
         items = store_mod._parse_results(results)
         assert len(items) == 1
         assert items[0].source == ItemSource.SELF_REVIEW
-        assert items[0].priority == 1.0
         assert items[0].last_reviewed_at is None
 
     @patch("src.memory.knowledge_store.chromadb.PersistentClient")

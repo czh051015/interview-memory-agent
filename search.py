@@ -6,10 +6,10 @@ from src.memory import knowledge_store as store
 args = sys.argv[1:]
 
 def fmt_item(item, sim=None):
-    """统一的结果行格式：状态 + 来源 + 优先级 + 题目。"""
+    """统一的结果行格式：状态 + 来源 + 题目。"""
     emoji = {"fail": "❌", "partial": "⚠️", "pass": "✅", "unknown": "❓"}.get(item.status.value, "❓")
     sim_str = f"  sim={sim:.2f}" if sim is not None else ""
-    return f"{emoji} [{item.status.value}] {item.question}  ({item.topic}) [{item.source.value}] p={item.priority:.1f}{sim_str}"
+    return f"{emoji} [{item.status.value}] {item.question}  ({item.topic}) [{item.source.value}]{sim_str}"
 
 
 if args:

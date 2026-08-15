@@ -194,7 +194,6 @@ def _to_metadata(item: KnowledgeItem) -> dict:
         "user_note": item.user_note[:200],  # 截断
         "category": item.category.value,
         "source": item.source.value,
-        "priority": item.priority,
         "mastery_score": item.mastery_score,
         "last_reviewed_at": item.last_reviewed_at.isoformat() if item.last_reviewed_at else "",
         "review_count": item.review_count,
@@ -270,7 +269,6 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
             mastery_score=float(meta.get("mastery_score", 1.0)),
             review_count=int(meta.get("review_count", 0)),
             source=source,
-            priority=float(meta.get("priority", 1.0)),
             last_reviewed_at=datetime.fromisoformat(last_reviewed) if last_reviewed else None,
             created_at=datetime.fromisoformat(meta["created_at"]) if meta.get("created_at") else None,
         )

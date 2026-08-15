@@ -40,9 +40,7 @@ class KnowledgeItem(BaseModel):
     mastery_score: float = Field(default=1.0, ge=0.0, le=1.0)
     last_reviewed_at: Optional[datetime] = None
     review_count: int = 0
-    related_items: list[str] = Field(default_factory=list)
     source: ItemSource = ItemSource.SELF_REVIEW  # phase-2-plan §2.3
-    priority: float = Field(default=1.0, ge=0.0)  # 交叉验证修正的复习优先级
     created_at: datetime = Field(default_factory=datetime.utcnow)
     _similarity: float = 0.0  # 内部使用，不入库
 
