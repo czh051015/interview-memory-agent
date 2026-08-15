@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 from src.cleaner.schema import KnowledgeItem, ItemStatus
 from src.cleaner.state_machine import transition
+from src.memory.mastery import INITIAL_MASTERY
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +86,11 @@ def annotate_unknown(
                     actor="annotate",
                     now=now,
                 )
-                # 标注 = 一次判断，更新时间锚点作为衰减起点
-                annotated = annotated.model_copy(update={"last_reviewed_at": now})
+                # 标注 = 一次判断：更新衰减起点 + 按面试表现设初始掌握度
+                annotated = annotated.model_copy(update={
+                    "last_reviewed_at": now,
+                    "mastery_score": INITIAL_MASTERY[new_status],
+                })
                 updated.append(annotated)
                 continue
         updated.append(item)

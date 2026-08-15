@@ -75,3 +75,15 @@
 | V7 | 中 | **topic 粒度碎，聚合失效**：326 条数据 342 topics，几乎一条一簇 | `run_market.py` 日志 `342 pool topics, 271 clusters` | 定固定 topic 分类法 | ✅ 已作废（考点榜删除，topic 只用于浏览不再统计） |
 | V8 | 低 | **嵌入又逐条调用（B1 复发）**：market 模块未复用批量 embed | 10 次 `POST /api/embed` 一次一条 | 复用批量 embed | ✅ 已关闭（store_items 批量 embed，import 实测 12 次分批非逐条） |
 | V9 | 中 | **面经导入 category 写死 KNOWLEDGE**：行为/信息题（自我介绍/薪酬/实习计划）混进待标注队列，干扰错题标注 | `run_preprocess.py --import` 输出混入"自我介绍""薪酬期望" | LLM 提 topic 时同时判 category（knowledge/info），annotate_jingyan 过滤 info 类 | ✅ 已关闭（2026-08-14） |
+
+---
+
+# Issues · 复习循环（阶段三，2026-08-15）
+
+> 触发：实现 `run_review.py` 时，发现「选题」这个动作反向暴露了数据模型的语义 bug
+
+| # | 严重 | 描述 | 根因 | 修法 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| V10 | 高 | **fail 题 mastery 默认 1.0**：标"不会"的题掌握度满分，gap=0，复习循环选不出它（要等 8 天衰减才 gap>0） | `mastery_score` 字段默认 1.0，但 fail 语义是"不会"，掌握度应低 | 加 `INITIAL_MASTERY` 映射（fail=0.3/partial=0.6/pass=1.0），annotate/decompose 按 status 设 mastery 初值 | ✅ 已关闭 |
+| V11 | 低 | **review ×1.2 涨速慢**：fail 题从 0.3 涨到 1.0 需答对约 7 次才"攻克"（gap 归零） | ×1.2 是相对涨幅的初值 | 已调整 ×1.5（fail 题 3 次攻克、partial 2 次）；仍待真实数据校准 | ✅ 已调整 |
+| V12 | 高 | **答错死循环**：fail 题(0.3)答错后 `min(0.3,0.5)=0.3` 不变，动态重排后仍排最前，同一题无限重复（被迫"假装答对"才能跳过） | 答错无下降空间 + 动态重排「纠缠」退化成死循环（Q4 推荐的失误） | `run_review.py` 加「本轮不重复」：答过的题本轮跳过，一轮过完进下一轮，答错的下轮再出现 | ✅ 已关闭 |

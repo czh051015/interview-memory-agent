@@ -9,6 +9,7 @@ from src.memory.mastery import (
     decay,
     effective_mastery,
     review,
+    review_fail,
     rank,
     _elapsed_days,
 )
@@ -67,9 +68,9 @@ class TestReview:
         assert out.review_count == 1
         assert out.last_reviewed_at == NOW
 
-    def test_bump_by_1_2(self):
+    def test_bump_by_1_5(self):
         out = review(make_item(mastery=0.5), now=NOW)
-        assert out.mastery_score == pytest.approx(0.6)
+        assert out.mastery_score == pytest.approx(0.75)
 
     def test_cap_at_1(self):
         out = review(make_item(mastery=0.9), now=NOW)
@@ -90,6 +91,27 @@ class TestReview:
         out = review(make_item())
         assert out.last_reviewed_at is not None
         assert datetime.utcnow() - out.last_reviewed_at < timedelta(minutes=1)
+
+
+class TestReviewFail:
+    """答错：mastery 封顶 0.5，低于 0.5 保持原样。"""
+
+    def test_high_mastery_drops_to_0_5(self):
+        out = review_fail(make_item(mastery=0.9), now=NOW)
+        assert out.mastery_score == 0.5
+
+    def test_low_mastery_unchanged(self):
+        """本来就低于 0.5 的题，答错不再降、也不涨。"""
+        out = review_fail(make_item(mastery=0.3), now=NOW)
+        assert out.mastery_score == 0.3
+
+    def test_count_accumulates(self):
+        out = review_fail(make_item(review_count=2), now=NOW)
+        assert out.review_count == 3
+
+    def test_updates_last_reviewed_at(self):
+        out = review_fail(make_item(mastery=0.9), now=NOW)
+        assert out.last_reviewed_at == NOW
 
 
 class TestRank:

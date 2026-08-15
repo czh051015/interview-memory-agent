@@ -16,6 +16,7 @@ from src.cleaner.prompts import DECOMPOSE_SYSTEM
 from src.cleaner.status import infer_status
 from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, DecomposeResult
 from src.cleaner.state_machine import record_birth
+from src.memory.mastery import INITIAL_MASTERY
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,7 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
             round=(result.get("round") or "").strip(),
             date=(result.get("date") or "").strip(),
             status=final_status,
+            mastery_score=INITIAL_MASTERY[final_status],
             user_note=user_note,
             created_at=datetime.utcnow(),
         )

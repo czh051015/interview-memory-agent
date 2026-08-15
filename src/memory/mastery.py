@@ -24,6 +24,9 @@ from src.cleaner.schema import KnowledgeItem, ItemStatus
 # 遗忘速率（每天衰减比例），phase-2-plan §3.3：λ=0.05
 LAMBDA = 0.05
 
+# 复习答对的涨幅倍数（初值待校准）：×1.5 → fail 题(0.3)答对 3 次涨到 1.0
+REVIEW_BOOST = 1.5
+
 # 双因子权重，初值待校准
 W_RELEVANCE = 0.5
 W_IMPORTANCE = 0.5
@@ -34,6 +37,15 @@ STATUS_IMPORTANCE = {
     ItemStatus.PARTIAL: 0.6,
     ItemStatus.PASS: 0.2,
     ItemStatus.UNKNOWN: 0.0,
+}
+
+# status → 初始掌握度：标注/拆解时按面试表现设 mastery 初值
+# （fail=不会掌握度低，pass=会掌握度高；方向与 STATUS_IMPORTANCE 相反）
+INITIAL_MASTERY = {
+    ItemStatus.FAIL: 0.3,
+    ItemStatus.PARTIAL: 0.6,
+    ItemStatus.PASS: 1.0,
+    ItemStatus.UNKNOWN: 1.0,
 }
 
 
@@ -62,14 +74,30 @@ def effective_mastery(item: KnowledgeItem, now: datetime | None = None) -> float
 
 
 def review(item: KnowledgeItem, now: datetime | None = None) -> KnowledgeItem:
-    """复习重置：mastery = min(1.0, 上次 × 1.2)，review_count +1，更新复习时间。
+    """复习答对：mastery = min(1.0, 上次 × REVIEW_BOOST)，review_count +1，更新复习时间。
 
     返回新对象，不改动原 item。衰减只在读取时算，这里不把已衰减值写回。
     """
-    bumped = min(1.0, item.mastery_score * 1.2)
+    bumped = min(1.0, item.mastery_score * REVIEW_BOOST)
     return item.model_copy(
         update={
             "mastery_score": round(bumped, 4),
+            "review_count": item.review_count + 1,
+            "last_reviewed_at": now or datetime.utcnow(),
+        }
+    )
+
+
+def review_fail(item: KnowledgeItem, now: datetime | None = None) -> KnowledgeItem:
+    """复习答错：mastery = min(当前, 0.5)，review_count +1，更新复习时间。
+
+    答错 = 暴露「以为会了其实不会」，掌握度封顶 0.5（本就低于 0.5 的保持原样），
+    让 gap 变大、这道题更快再出现（间隔重复的 again 语义）。
+    """
+    dropped = min(item.mastery_score, 0.5)
+    return item.model_copy(
+        update={
+            "mastery_score": round(dropped, 4),
             "review_count": item.review_count + 1,
             "last_reviewed_at": now or datetime.utcnow(),
         }
