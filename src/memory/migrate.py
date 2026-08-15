@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 from src.config import CHROMA_DIR
-from src.memory.store import get_collection
+from src.memory.knowledge_store import get_collection
 
 logger = logging.getLogger(__name__)
 
