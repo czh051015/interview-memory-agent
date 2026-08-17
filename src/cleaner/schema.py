@@ -1,9 +1,14 @@
 """KnowledgeItem —— 核心实体（product-plan §8.1）。"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
+
+
+def utcnow() -> datetime:
+    """当前 UTC 时间（naive）。等价于弃用的 datetime.utcnow()，避免 DeprecationWarning。"""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class ItemStatus(str, Enum):
@@ -19,15 +24,18 @@ class ItemCategory(str, Enum):
 
 
 class ItemSource(str, Enum):
-    """数据来源二枚举：自己的复盘 / 网上面经。"""
+    """数据来源枚举：自己的复盘 / 网上面经 / 模拟面试自动采集。"""
     SELF_REVIEW = "self_review"          # 自己的面试复盘
     PUBLIC_JINGYAN = "public_jingyan"    # 网上面经（只有题目，无自评）
+    MOCK_INTERVIEW = "mock_interview"    # 模拟面试答差自动采集的新弱点
 
 
 class KnowledgeItem(BaseModel):
     """一条拆解后的面试 Q&A 记录。"""
     id: str = Field(default="", description="ki_20260815_001")
     question: str = Field(..., description="面试题原文")
+    answer: str = Field(default="", description="参考答案（面经里自带的「回答：XXX」，没有则为空）")
+    question_type: str = Field(default="", description="题型：八股文/项目/场景/行为，没有则为空")
     topic: str = Field(default="", description="主题标签，如'混合检索'")
     category: ItemCategory = ItemCategory.KNOWLEDGE  # ISSUES F2
     company: str = Field(default="")
@@ -41,7 +49,11 @@ class KnowledgeItem(BaseModel):
     last_reviewed_at: Optional[datetime] = None
     review_count: int = 0
     source: ItemSource = ItemSource.SELF_REVIEW  # phase-2-plan §2.3
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    behavior_tags: list[str] = Field(
+        default_factory=list,
+        description="行为特征标签（人级画像），如 ['表达绕弯','回避问题']，模拟面试结束统一写入",
+    )
+    created_at: datetime = Field(default_factory=utcnow)
     _similarity: float = 0.0  # 内部使用，不入库
 
 
@@ -56,3 +68,4 @@ class DecomposeResult(BaseModel):
     raw_text: str = ""
     unknown_count: int = 0  # status=unknown 的条目数
     total_count: int = 0
+    suspected_fail: bool = False  # 整篇"明说栽过"→疑似错题，需用户确认后才标 fail

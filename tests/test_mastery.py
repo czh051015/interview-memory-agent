@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from src.cleaner.schema import KnowledgeItem, ItemStatus
+from src.cleaner.schema import KnowledgeItem, ItemStatus, utcnow
 from src.memory.mastery import (
     decay,
     effective_mastery,
@@ -90,7 +90,7 @@ class TestReview:
     def test_default_now_is_utcnow(self):
         out = review(make_item())
         assert out.last_reviewed_at is not None
-        assert datetime.utcnow() - out.last_reviewed_at < timedelta(minutes=1)
+        assert utcnow() - out.last_reviewed_at < timedelta(minutes=1)
 
 
 class TestReviewFail:

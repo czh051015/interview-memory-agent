@@ -17,8 +17,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 from datetime import datetime
 
 from src.memory import knowledge_store as store
+from src.memory import review_log
 from src.memory.mastery import rank, review, review_fail, effective_mastery
-from src.cleaner.schema import KnowledgeItem
+from src.cleaner.schema import KnowledgeItem, utcnow
 
 
 def load_review_items() -> list[KnowledgeItem]:
@@ -29,7 +30,7 @@ def load_review_items() -> list[KnowledgeItem]:
 
 
 def main() -> int:
-    now = datetime.utcnow()
+    now = utcnow()
     items = load_review_items()
     if not items:
         print("没有待复习的题（fail/partial 为空）。")
@@ -70,10 +71,16 @@ def main() -> int:
         if ans == "q":
             break
         elif ans == "y":
+            before = top.mastery_score
             top = review(top, now=now)
+            review_log.append(item_id=top.id, question=top.question, before=before,
+                              after=top.mastery_score, action="review", actor="review")
             print(f"  ✅ 掌握度 → {top.mastery_score:.2f}\n")
         elif ans == "n":
+            before = top.mastery_score
             top = review_fail(top, now=now)
+            review_log.append(item_id=top.id, question=top.question, before=before,
+                              after=top.mastery_score, action="review_fail", actor="review")
             print(f"  ❌ 掌握度 → {top.mastery_score:.2f}\n")
         else:
             print("  无效输入，请输入 y / n / q\n")

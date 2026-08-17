@@ -1,181 +1,130 @@
-"""检索余弦阈值校准（ISSUES E4）。
-对 10 条标注查询，测试 4 个候选阈值，选 Recall@5 稳定 + 噪音归零的取值。
+"""检索质量 eval —— Recall@k 曲线 + PR 曲线 + 阈值校准（检索层唯一有 ground truth 的部分）。
+
+20 条标注查询（eval/annotations.py），每条的 relevant/irrelevant 用题目原文唯一子串标识。
+指标：
+  - Recall@k：检索 top-k 里命中 relevant 的比例（k=1..10），反映「纯相似度排序」质量。
+  - Precision@k：top-k 里 relevant 占比。
+  - 噪音：明确不该召回的 irrelevant 题是否被召回（定性检查）。
+  - PR 曲线：扫描相似度阈值，看阈值过滤对 precision/recall 的权衡。
+
+实现要点：每条查询只检索一次 top_k=10（拿到问题+相似度），Recall@k 和阈值 PR 都在内存里
+模拟——既避免重复 embed，也规避 chromadb 累积 query 崩溃（约 40-50 次触发 access violation）。
+
+用法：python eval/retrieval_eval.py   （或 python -m eval.retrieval_eval）
+输出：eval/retrieval_eval_results.json
 """
-import sys, io, json
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
 
 from src.memory import knowledge_store as store
+from eval.annotations import ANNOTATED_QUERIES
 
-# ── 标注查询：query → 期望召回的 question 列表 ──
-ANNOTATED_QUERIES = [
-    {
-        "query": "Agent框架 多智能体 工具调用",
-        "relevant": [
-            "如果让你设计一个Agent要考虑哪些模块？",
-            "Agent的短期长期记忆是怎么实现的？",
-            "有没有考虑用大模型自己排除api超时和报错？",
-        ],
-        "irrelevant_must_not_include": [
-            "什么是两阶段提交？",
-            "有实习过吗？",
-            "多线程写一个死锁",
-            "mysql的undolog，redolog，binlog区别和场景？",
-        ],
-    },
-    {
-        "query": "RAG 检索增强 知识库",
-        "relevant": [
-            "出现幻觉怎么处理？",  # 提到了RAG
-        ],
-        "irrelevant_must_not_include": [
-            "多线程写一个死锁",
-            "为什么要volatile关键字？",
-        ],
-    },
-    {
-        "query": "线程池 并发 多线程",
-        "relevant": [
-            "讲一下java线程池？",
-            "如果你重新设计一个线程池会怎么设计？",
-            "多线程写一个死锁",
-        ],
-        "irrelevant_must_not_include": [
-            "什么是两阶段提交？",
-            "合并两个有序数组",
-        ],
-    },
-    {
-        "query": "数据库 MySQL 事务",
-        "relevant": [
-            "mysql的undolog，redolog，binlog区别和场景？",
-            "什么是两阶段提交？",
-        ],
-        "irrelevant_must_not_include": [
-            "出现幻觉怎么处理？",
-            "合并两个有序数组",
-        ],
-    },
-    {
-        "query": "提示词 Prompt工程",
-        "relevant": [
-            "提示词具体是怎么做？",
-            "还有其他提示词吗？",
-            "出现幻觉怎么处理？",
-        ],
-        "irrelevant_must_not_include": [
-            "合并两个有序数组",
-            "随便写一个单例模式",
-        ],
-    },
-]
-
-THRESHOLDS = [0.30, 0.40, 0.45, 0.50, 0.55, 0.60]
+K_MAX = 10
+THRESHOLDS = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60]
 
 
-def evaluate_threshold(threshold: float) -> dict:
-    """对给定阈值跑全部标注查询，计算 Recall@5 和噪音率。"""
-    total_relevant = 0
-    total_retrieved = 0
-    total_noise = 0
+def _hits(frags: list[str], questions: list[str]) -> int:
+    return sum(1 for q in questions if any(f in q for f in frags))
+
+
+def _retrieve_once(query: str, top_k: int = K_MAX) -> list[dict]:
+    """每条查询只检索一次，返回 [{q, sim}]（按相似度降序）。"""
+    results = store.search(query, top_k=top_k, similarity_threshold=None)
+    return [{"q": it.question, "sim": getattr(it, "_similarity", 0.0)} for it in results]
+
+
+def _collect_all() -> list[dict]:
+    """一次性检索全部标注查询（20 次 search，避免累积崩溃）。"""
+    out = []
+    for aq in ANNOTATED_QUERIES:
+        out.append({"aq": aq, "hits": _retrieve_once(aq["query"])})
+    return out
+
+
+def recall_at_k(collected: list[dict], k: int) -> dict:
+    recall_sum = prec_sum = 0.0
+    noise_total = 0
     per_query = []
 
-    for aq in ANNOTATED_QUERIES:
-        results = store.search(
-            query=aq["query"],
-            top_k=5,
-            similarity_threshold=threshold,
-        )
-        retrieved_questions = [item.question for item in results]
+    for c in collected:
+        aq = c["aq"]
+        qs = [h["q"] for h in c["hits"][:k]]
+        r_hit = _hits(aq["relevant"], qs)
+        i_hit = _hits(aq["irrelevant"], qs)
+        recall_sum += r_hit / len(aq["relevant"]) if aq["relevant"] else 0.0
+        prec_sum += r_hit / k
+        noise_total += i_hit
+        per_query.append({"query": aq["query"][:24], "recall": round(r_hit / len(aq["relevant"]), 3), "noise": i_hit})
 
-        # 召回的相关题数
-        relevant_hits = sum(1 for q in aq["relevant"] if q in retrieved_questions)
-        # 召回的噪音题数（明确不应出现的）
-        noise_hits = sum(1 for q in aq["irrelevant_must_not_include"] if q in retrieved_questions)
-
-        total_relevant += len(aq["relevant"])
-        total_retrieved += relevant_hits
-        total_noise += noise_hits
-
-        per_query.append({
-            "query": aq["query"][:30],
-            "retrieved": retrieved_questions[:5],
-            "relevant_hits": relevant_hits,
-            "noise_hits": noise_hits,
-        })
-
-    recall = total_retrieved / total_relevant if total_relevant > 0 else 0
-    noise_rate = total_noise / (len(ANNOTATED_QUERIES) * 5)  # 最多 25 条结果
-
+    n = len(collected)
     return {
-        "threshold": threshold,
-        "recall@5": round(recall, 3),
-        "noise_rate": round(noise_rate, 3),
-        "total_noise": total_noise,
+        "k": k,
+        "recall_at_k": round(recall_sum / n, 3),
+        "precision_at_k": round(prec_sum / n, 3),
+        "total_noise": noise_total,
         "per_query": per_query,
     }
 
 
+def pr_at_threshold(collected: list[dict], threshold: float) -> dict:
+    """内存模拟阈值过滤：保留 sim>=threshold 的结果，算平均 precision/recall。"""
+    tp = fp = fn = 0
+    for c in collected:
+        aq = c["aq"]
+        kept = [h["q"] for h in c["hits"] if h["sim"] >= threshold]
+        r_hit = _hits(aq["relevant"], kept)
+        tp += r_hit
+        fn += len(aq["relevant"]) - r_hit
+        fp += len(kept) - r_hit
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    return {"threshold": threshold, "precision": round(precision, 3), "recall": round(recall, 3)}
+
+
 def main():
-    # 确保有数据
     stats = store.get_stats()
     if stats["total"] == 0:
-        print("错题本为空，请先运行 run_interview.py")
+        print("错题本为空，先跑 run_interview.py / annotate_jingyan.py。")
         return
 
-    print(f"数据量: {stats['total']} 题")
-    print(f"标注查询: {len(ANNOTATED_QUERIES)} 条")
-    print(f"候选阈值: {THRESHOLDS}")
+    print(f"数据量: {stats['total']} 题 · 标注查询: {len(ANNOTATED_QUERIES)} 条")
     print("=" * 60)
 
-    results = []
-    for t in THRESHOLDS:
-        r = evaluate_threshold(t)
-        results.append(r)
+    collected = _collect_all()
 
-    # ── 输出表格 ──
-    print(f"\n{'阈值':<8} {'Recall@5':<10} {'噪音数':<8} {'噪音率':<8} {'推荐'}")
-    print("-" * 50)
+    # ── Recall@k 曲线 ──
+    print(f"\n{'k':<4} {'Recall@k':<10} {'Precision@k':<12} {'噪音题数'}")
+    print("-" * 40)
+    recall_curve = [recall_at_k(collected, k) for k in range(1, K_MAX + 1)]
+    for r in recall_curve:
+        print(f"{r['k']:<4} {r['recall_at_k']:<10.3f} {r['precision_at_k']:<12.3f} {r['total_noise']}")
 
-    best = None
-    for r in results:
-        # 推荐标准：Recall@5 >= 0.6 且噪音 = 0 的最小阈值
-        ok = r["recall@5"] >= 0.6 and r["total_noise"] == 0
-        mark = "✅" if ok else ""
-        if ok and best is None:
-            best = r
-        print(f"{r['threshold']:<8.2f} {r['recall@5']:<10.3f} {r['total_noise']:<8} {r['noise_rate']:<8.3f} {mark}")
+    # ── 阈值扫描 + PR ──
+    print(f"\n{'阈值':<8} {'Precision':<10} {'Recall':<8}")
+    print("-" * 30)
+    pr_curve = [pr_at_threshold(collected, t) for t in THRESHOLDS]
+    for r in pr_curve:
+        print(f"{r['threshold']:<8.2f} {r['precision']:<10.3f} {r['recall']:<8.3f}")
 
-    # ── 推荐阈值 ──
-    print()
-    if best:
-        print(f"推荐阈值: {best['threshold']} (Recall@5={best['recall@5']}, 噪音=0)")
-    else:
-        # 找噪音为 0 的候选中 Recall 最高的
-        zero_noise = [r for r in results if r["total_noise"] == 0]
-        if zero_noise:
-            best = max(zero_noise, key=lambda r: r["recall@5"])
-            print(f"推荐阈值: {best['threshold']} (Recall@5={best['recall@5']}, 噪音=0, 噪音非零但最优)")
-        else:
-            # 噪音都消不掉，选 Recall 最高的
-            best = max(results, key=lambda r: r["recall@5"])
-            print(f"警告: 所有阈值均有噪音。建议阈值: {best['threshold']} (Recall@5={best['recall@5']})")
-            print("需增加数据量提升嵌入区分度（ISSUES F1）")
-
-    # ── 保存结果 ──
-    output = {
-        "eval_time": __import__('datetime').datetime.utcnow().isoformat(),
+    # ── 落盘 ──
+    out = {
         "data_count": stats["total"],
-        "results": [{k: v for k, v in r.items() if k != "per_query"} for r in results],
-        "recommended_threshold": best["threshold"] if best else None,
-        "per_query_details": [r["per_query"] for r in results],
+        "annotated_queries": len(ANNOTATED_QUERIES),
+        "recall_at_k": [{k: v for k, v in r.items() if k != "per_query"} for r in recall_curve],
+        "pr_curve": pr_curve,
     }
-
-    import os
-    os.makedirs("eval", exist_ok=True)
-    with open("eval/retrieval_results.json", "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2, default=str)
-
-    print(f"\n详细结果已保存: eval/retrieval_results.json")
+    with open("eval/retrieval_eval_results.json", "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=2)
+    print(f"\n结果已保存: eval/retrieval_eval_results.json")
 
 
 if __name__ == "__main__":

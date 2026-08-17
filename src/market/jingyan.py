@@ -16,6 +16,7 @@ from src.cleaner.schema import (
     ItemStatus,
     ItemCategory,
     ItemSource,
+    utcnow,
 )
 from src.market.prompts import JINGYAN_TOPIC_SYSTEM
 
@@ -139,7 +140,7 @@ def import_jingyan(
                 date=meta.get("date", ""),
                 status=ItemStatus.UNKNOWN,
                 source=ItemSource.PUBLIC_JINGYAN,
-                created_at=datetime.utcnow(),
+                created_at=utcnow(),
             )
         )
 

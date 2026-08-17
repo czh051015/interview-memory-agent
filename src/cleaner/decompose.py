@@ -9,12 +9,12 @@ product-plan §7.3 定义的处理流程：
 
 import logging
 import re
+import uuid
 from datetime import datetime
 
 from src.llm import chat_json
 from src.cleaner.prompts import DECOMPOSE_SYSTEM
-from src.cleaner.status import infer_status
-from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, DecomposeResult
+from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, DecomposeResult, utcnow
 from src.cleaner.state_machine import record_birth
 from src.memory.mastery import INITIAL_MASTERY
 
@@ -62,36 +62,21 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
 
     # Step 2: 组装 KnowledgeItem
     items = []
-    unknown_count = 0
     raw_items = result.get("items", [])
+
+    # 段级声明：整篇"没答上"→疑似错题（需用户确认后标 fail）；其余→知识库
+    default_status = (result.get("default_status") or "").strip()
+    suspected_fail = default_status == "fail"
 
     for i, item_data in enumerate(raw_items):
         question = (item_data.get("question") or "").strip()
         if not question:
             continue
 
-        # LLM 推断的 status
-        llm_status = item_data.get("status", "unknown")
         user_note = (item_data.get("user_note") or "").strip()
-        from_rule = False  # status 来源：False=LLM 推断，True=规则兜底
 
-        # 规则层兜底：LLM 返回 unknown 的，规则再判断一次
-        if llm_status == "unknown" and user_note:
-            rule_status = infer_status(user_note)
-            if rule_status != ItemStatus.UNKNOWN:
-                logger.debug("Rule override: '%s' → %s", user_note[:30], rule_status.value)
-                final_status = rule_status
-                from_rule = True
-            else:
-                final_status = ItemStatus.UNKNOWN
-        else:
-            try:
-                final_status = ItemStatus(llm_status)
-            except ValueError:
-                final_status = ItemStatus.UNKNOWN
-
-        if final_status == ItemStatus.UNKNOWN:
-            unknown_count += 1
+        # 分流设计：不再逐题猜 status，一律 unknown，等用户手动标错题
+        final_status = ItemStatus.UNKNOWN
 
         # 解析 category（ISSUES F2）
         cat_raw = (item_data.get("category") or "knowledge").strip()
@@ -105,8 +90,10 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
             logger.warning("题目含占位符，保留原样未推断: %s", question[:60])
 
         ki = KnowledgeItem(
-            id=f"ki_{datetime.utcnow():%Y%m%d}_{i+1:03d}",
+            id=f"ki_{utcnow():%Y%m%d}_{uuid.uuid4().hex[:6]}_{i+1:03d}",
             question=question,
+            answer=(item_data.get("answer") or "").strip(),
+            question_type=(item_data.get("question_type") or "").strip(),
             topic=(item_data.get("topic") or "").strip(),
             category=category,
             company=(result.get("company") or "").strip(),
@@ -116,21 +103,17 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
             status=final_status,
             mastery_score=INITIAL_MASTERY[final_status],
             user_note=user_note,
-            created_at=datetime.utcnow(),
+            created_at=utcnow(),
         )
         # 记出生证据（from=null），来源可追溯：LLM 推断 or 规则兜底
         ki = record_birth(
             ki,
-            reason="规则推断" if from_rule else "LLM 推断",
+            reason="入库（待用户标错题）",
             actor="decompose",
         )
         items.append(ki)
 
-    logger.info(
-        "Decomposed: %d items, %d unknown (%.0f%%)",
-        len(items), unknown_count,
-        unknown_count / len(items) * 100 if items else 0,
-    )
+    logger.info("Decomposed: %d items", len(items))
 
     return DecomposeResult(
         company=(result.get("company") or "").strip(),
@@ -139,6 +122,7 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
         date=(result.get("date") or "").strip(),
         items=items,
         raw_text=raw_text,
-        unknown_count=unknown_count,
+        unknown_count=len(items),
         total_count=len(items),
+        suspected_fail=suspected_fail,
     )

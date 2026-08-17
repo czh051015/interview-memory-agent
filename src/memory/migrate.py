@@ -6,6 +6,7 @@ from datetime import datetime
 
 from src.config import CHROMA_DIR
 from src.memory.knowledge_store import get_collection
+from src.cleaner.schema import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def migrate(to_version: str) -> None:
         return
 
     MIGRATION_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_file = MIGRATION_LOG_DIR / f"migrate_{current}_to_{to_version}_{datetime.utcnow():%Y%m%d_%H%M%S}.log"
+    log_file = MIGRATION_LOG_DIR / f"migrate_{current}_to_{to_version}_{utcnow():%Y%m%d_%H%M%S}.log"
 
     logger.info("Migrating schema %s → %s", current, to_version)
 

@@ -8,7 +8,7 @@ prompt_fn 注入便于测试；非交互环境不调用本模块。
 
 import logging
 from datetime import datetime
-from src.cleaner.schema import KnowledgeItem, ItemStatus
+from src.cleaner.schema import KnowledgeItem, ItemStatus, utcnow
 from src.cleaner.state_machine import transition
 from src.memory.mastery import INITIAL_MASTERY
 
@@ -45,7 +45,7 @@ def annotate_unknown(
     Returns:
         补标后的 KnowledgeItem 列表
     """
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     unknown_items = [item for item in items if item.status == ItemStatus.UNKNOWN]
     if not unknown_items:
         return list(items)

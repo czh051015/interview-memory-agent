@@ -13,6 +13,18 @@ CHROMA_DIR = Path(os.getenv("CHROMA_PERSIST_DIR", DATA_DIR / "chroma"))
 RUN_DIR = Path(os.getenv("RUN_DATA_DIR", DATA_DIR / "runs"))
 SEED_DIR = DATA_DIR / "seed"
 
+# ── 空间（space）：独立记忆命名空间，多用户/多用途隔离 ──
+# 每个空间一份独立的错题本 + 掌握度 + 复盘 + 行为特征。
+# 默认 "default"（向后兼容存量数据）；用 `--space 名字` 或环境变量 OFFERLOOP_SPACE 切换。
+SPACE = os.getenv("OFFERLOOP_SPACE", "default")
+
+
+def space_dir() -> Path:
+    """当前空间的数据目录（session/面试进度/复盘等临时文件）。"""
+    d = DATA_DIR / "spaces" / SPACE
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
 # ── DeepSeek API ──
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")

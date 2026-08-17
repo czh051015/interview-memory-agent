@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from src.cleaner.schema import KnowledgeItem, ItemStatus
+from src.cleaner.schema import KnowledgeItem, ItemStatus, utcnow
 
 MAX_HISTORY = 50  # 证据链上限，防 metadata 无限膨胀
 
@@ -49,7 +49,7 @@ def record_birth(
     now: datetime | None = None,
 ) -> KnowledgeItem:
     """首次赋值留出生记录（from=null）。返回新对象，不改原 item。"""
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     history = _append_history(item, None, item.status, reason, actor, now)
     return item.model_copy(update={"history": history})
 
@@ -73,6 +73,6 @@ def transition(
             "（已判断状态不能退回 unknown）"
         )
 
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     history = _append_history(item, item.status, new_status, reason, actor, now)
     return item.model_copy(update={"status": new_status, "history": history})

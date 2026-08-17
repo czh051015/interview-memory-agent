@@ -1,0 +1,584 @@
+"""模拟面试 · 面试官 Agent（v2：章节化结构化面试）。
+
+用法：
+  python run_mock_interview.py            # 开始面试
+  python run_mock_interview.py --recover  # 补写上次崩溃未写库的结果
+
+流程：读简历/JD → 读错题薄弱项 → LLM 生成章节化面试计划（自我介绍 / 项目深挖 /
+技术验证 / 行为面 / 动机面）→ 逐题追问 → 评估写回（weak 题更新 mastery + 新题答差自动采集）。
+
+出题依据（四层）：
+  · 简历   —— 项目深挖、查真实性（不是背技能点，是往下钻细节）
+  · JD     —— 能力项验证
+  · 错题本 —— 薄弱项验证 + 难度调节（会的少问，薄弱的重点问）
+  · 结构化方法论 —— STAR / 宝洁八大问 / 动机面兜底
+"""
+
+import sys
+import json
+import logging
+import uuid
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+
+from src.config import DATA_DIR, space_dir
+from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemSource, utcnow
+from src.cleaner.state_machine import record_birth
+from src.llm import chat_json
+from src.memory import knowledge_store as store
+from src.memory import mastery
+from src.memory import review_log
+
+# ── 面试规模 ──
+WEAK_POOL_SIZE = 5   # 薄弱项候选池（供 LLM 从错题本挑技术验证题）
+MAX_FOLLOWUPS = 2    # 每题最多追 2 轮
+MAX_ROUNDS = MAX_FOLLOWUPS + 1  # 首答 + 2 次追问 = 3 轮
+
+# ── 数据文件（面试官出题依据，支持 .pdf / .md / .txt，优先 .pdf）──
+
+
+# ══════════ 工具 1：读错题薄弱项 ══════════
+def get_weak_questions(top_k: int = WEAK_POOL_SIZE):
+    """读错题本 fail/partial，rank 排序取最薄弱的前 top_k（作为技术验证章的候选）。"""
+    fails = store.search(status="fail")
+    partials = store.search(status="partial")
+    items = fails + partials
+    if not items:
+        return []
+    return mastery.rank(items)[:top_k]
+
+
+# ══════════ 工具 2：读简历 / JD ══════════
+def _read_pdf_text(path) -> str:
+    """提取 PDF 文本：PyMuPDF（强，中文/复杂排版更好）→ 回退 pypdf → 都空则提示可能扫描件。"""
+    text = ""
+    try:
+        try:
+            import pymupdf as fitz  # PyMuPDF 1.24+ 推荐
+        except ImportError:
+            import fitz  # PyMuPDF 旧版
+        with fitz.open(path) as doc:
+            text = "\n".join(page.get_text() for page in doc).strip()
+    except Exception as e:
+        logging.warning("PyMuPDF 提取失败 %s：%s，回退 pypdf", path.name, e)
+
+    if not text:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(str(path))
+            text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+        except Exception as e:
+            logging.warning("pypdf 提取失败 %s：%s", path.name, e)
+
+    if not text:
+        logging.warning("%s 提取不到文字，可能是扫描件/图片型 PDF，需要 OCR（或改用 .md/.txt）", path.name)
+    return text
+
+
+def _read_doc(name: str) -> str:
+    """按 .pdf → .md → .txt 优先级读文档，命中一个非空就返回。"""
+    for ext in (".pdf", ".md", ".txt"):
+        path = DATA_DIR / f"{name}{ext}"
+        if not path.exists():
+            continue
+        try:
+            text = _read_pdf_text(path) if ext == ".pdf" else path.read_text(encoding="utf-8").strip()
+        except Exception as e:
+            logging.warning("读取 %s 失败：%s", path.name, e)
+            continue
+        if text:
+            return text
+    return ""
+
+
+def _read_profile() -> dict:
+    """读简历和 JD。支持 .pdf / .md / .txt，优先 .pdf；缺失/失败返回空（对应章节跳过）。"""
+    return {"resume": _read_doc("resume"), "jd": _read_doc("jd")}
+
+
+# ══════════ 工具 3：LLM 生成章节化面试计划 ══════════
+_PLAN_PROMPT = (
+    "你是资深面试官，为一位候选人设计一场结构化面试。你会收到三份材料：候选人简历、岗位 JD、"
+    "历史薄弱项（候选人面试中答错的题，含 id）。请按固定章节出题，只输出 JSON。\n\n"
+    "输出格式：\n"
+    '{"sections": [{"name": "章节名", "questions": [{"question": "面试题", "source": "来源", "item_id": null, "topic": "主题"}]}]}\n\n'
+    "章节（按顺序，数量固定）：\n"
+    "1. 自我介绍：1 题，开放式破冰。\n"
+    "2. 项目深挖：3 题，从简历项目里挑最值得深挖的，追问实现细节/难点/取舍，查真实性。简历为空则跳过本章。\n"
+    "3. 技术验证：3 题，混合「JD 能力项」和「历史薄弱项」。薄弱项优先用给定错题（item_id 填对应 id，source=weak，question 直接抄错题原文）；JD 能力项现场出题（source=jd，item_id=null）。\n"
+    "4. 行为面：1 题，用 STAR（情境-任务-行动-结果）考察软素质。\n"
+    "5. 动机面：1 题，为什么投这个岗 / 职业规划。\n\n"
+    "source 取值：generic / resume / jd / weak / behavior / motivation。\n"
+    "item_id 规则（严格）：只有「技术验证」章里、且题目是直接抄错题原文的题，才允许 source=weak 并填对应 item_id；其余所有题（自我介绍/项目深挖/行为面/动机面）source 一律不能是 weak，item_id 一律 null。\n"
+    "topic：每题一个简短主题标签（如 RAG、线程池、项目深挖、职业规划），用于归档。\n"
+    "题目要求：具体、可深挖、贴合候选人材料，不要泛泛的背诵题。"
+)
+
+
+def plan_interview(resume: str, jd: str, weak_items: list) -> list[dict]:
+    """LLM 生成章节化面试计划。失败返回 []（主流程提示重试）。"""
+    weak_str = "\n".join(f"- [{it.id}] {it.question}" for it in weak_items) if weak_items else "（无）"
+    user_prompt = (
+        f"## 候选人简历\n{resume or '（未提供）'}\n\n"
+        f"## 岗位 JD\n{jd or '（未提供）'}\n\n"
+        f"## 历史薄弱项\n{weak_str}"
+    )
+    try:
+        data = chat_json(_PLAN_PROMPT, user_prompt, max_tokens=4096)
+        return data.get("sections", [])
+    except Exception as e:
+        logging.warning("生成面试计划失败：%s", e)
+        return []
+
+
+# ══════════ 工具 4：检索答案对照 ══════════
+_EXPECTED_POINTS_PROMPT = (
+    "你是一位严格的面试官。下面是一道面试题，请列出候选人「应该答到的关键点」。\n"
+    "要求：只输出 JSON，格式 {\"points\": [\"要点1\", \"要点2\", ...]}，3-5 个要点，每个一句话。"
+)
+
+
+def get_expected_points(question: str, answer: str = "") -> list[str]:
+    """期望要点：有参考答案就用参考答案，否则 LLM 现场生成。"""
+    if answer.strip():
+        return [answer.strip()]
+    try:
+        data = chat_json(_EXPECTED_POINTS_PROMPT, f"面试题：{question}")
+        return data.get("points", [])
+    except Exception as e:
+        logging.warning("生成期望要点失败，跳过对照：%s", e)
+        return []
+
+
+# ══════════ 追问判断（LLM 结构化输出，系统只卡轮次上限）══════════
+_FOLLOWUP_PROMPT = (
+    "你是一位严格的面试官，正在考察候选人。你会收到：面试题、期望要点、候选人的回答。\n"
+    "任务：判断是否追问，并评价表现。只输出 JSON：\n"
+    "{\"need_followup\": true/false, \"followup_question\": \"追问问题\", "
+    "\"reason\": \"判断依据\", \"performance\": \"pass\"|\"partial\"|\"fail\"}\n"
+    "标准：覆盖大部分要点且条理清晰→pass 不再追问；漏关键点或含糊→partial 追问；明显不会或跑题→fail。\n"
+    "追问要具体、往下钻，围绕候选人回答里的细节/数字/取舍往下问（可追问情境-任务-行动-结果），不要泛泛地问。"
+)
+
+
+def judge_followup(question: str, points: list[str], answer: str, round_num: int) -> dict:
+    """追问判断：LLM 输出结构化判断，兜底为 partial。"""
+    user_prompt = (
+        f"面试题：{question}\n"
+        f"期望要点：{points}\n"
+        f"候选人回答（第{round_num}轮）：{answer}"
+    )
+    try:
+        return chat_json(_FOLLOWUP_PROMPT, user_prompt)
+    except Exception as e:
+        logging.warning("追问判断失败，兜底 partial：%s", e)
+        return {"need_followup": False, "followup_question": "", "reason": "判断失败", "performance": "partial"}
+
+
+# ══════════ 工具 5：写回 ══════════
+def record_result(item, performance: str, behaviors: list[str]):
+    """weak 题按表现更新 mastery（pass 涨 / partial 保持 / fail 降），并合并行为特征。"""
+    if performance == "pass":
+        updated = mastery.review(item)
+    elif performance == "fail":
+        updated = mastery.review_fail(item)
+    else:
+        updated = mastery.review_partial(item)
+    merged = list(set(updated.behavior_tags + behaviors))
+    return updated.model_copy(update={"behavior_tags": merged})
+
+
+def _collect_new_item(r: dict) -> KnowledgeItem:
+    """面试中答差的新题（简历/JD/行为/动机来源），自动采集进错题本，来源可追溯。"""
+    status = ItemStatus.FAIL if r["performance"] == "fail" else ItemStatus.PARTIAL
+    ki = KnowledgeItem(
+        id=f"ki_{utcnow():%Y%m%d}_{uuid.uuid4().hex[:6]}_{r.get('source', 'mock')[:3]}",
+        question=r["question"],
+        answer="",  # 模拟面试没有参考答案，靠下次面试/研究员补
+        topic=r.get("topic", ""),
+        status=status,
+        source=ItemSource.MOCK_INTERVIEW,
+        mastery_score=mastery.INITIAL_MASTERY[status],
+        created_at=utcnow(),
+    )
+    return record_birth(ki, reason=f"模拟面试表现 {r['performance']}", actor="mock_interview")
+
+
+def _write_back(results: list[dict], behaviors: list[str]):
+    """写回：weak 题更新 mastery，新题答差自动采集。返回 (updated, new)。"""
+    updated = []
+    new = []
+    for r in results:
+        if r.get("source") == "weak" and r.get("item") is not None:
+            updated.append(record_result(r["item"], r["performance"], behaviors))
+        elif r.get("performance") in ("fail", "partial"):
+            new.append(_collect_new_item(r))
+    return updated, new
+
+
+_ACTION_OF = {"pass": "review", "fail": "review_fail", "partial": "review_partial"}
+
+
+def _log_write_back(results: list[dict], updated_items: list):
+    """写库成功后，把 weak 题的 mastery 变化记进复习日志（演变动态的种子）。
+
+    只在 store 成功后调用，避免写库失败 + recover 重跑导致日志重复。
+    """
+    after_by_id = {u.id: u for u in updated_items}
+    for r in results:
+        it = r.get("item")
+        if it is not None and it.id in after_by_id:
+            u = after_by_id[it.id]
+            review_log.append(item_id=it.id, question=it.question,
+                              before=it.mastery_score, after=u.mastery_score,
+                              action=_ACTION_OF.get(r.get("performance", ""), "review_partial"),
+                              actor="mock_interview")
+
+
+# ══════════ 行为特征总结 ══════════
+_BEHAVIOR_PROMPT = (
+    "你是面试官，回顾整场面试，总结候选人的行为特征。只输出 JSON：{\"tags\": [\"标签1\", ...]}\n"
+    "维度（可多个，也可空数组）：答不到点（知识缺口）、表达绕弯（逻辑不清）、回避问题（转移话题）。\n"
+    "只输出确实暴露的问题，没有就输出空数组。"
+)
+
+
+def summarize_behaviors(records: list[dict]) -> list[str]:
+    """整场面试结束，总结行为特征标签。"""
+    summary = "\n".join(
+        f"题：{r['question']}\n答：{r['answer'][:120]}\n表现：{r['performance']}" for r in records
+    )
+    try:
+        data = chat_json(_BEHAVIOR_PROMPT, summary)
+        return data.get("tags", [])
+    except Exception as e:
+        logging.warning("行为特征总结失败：%s", e)
+        return []
+
+
+# ══════════ 面试复盘报告 ══════════
+_REVIEW_PROMPT = (
+    "你是资深面试官，刚面完一位候选人。下面是整场面试的完整记录（题目、逐轮问答、追问理由、最终表现）。\n"
+    "请输出一份复盘报告，要具体、可执行，指出候选人每道题哪里没答到点、为什么、下次怎么改进。\n"
+    "只输出 JSON：\n"
+    '{"overall": "整体评价（2-3句，点出最致命的问题）", '
+    '"items": [{"question": "题", "performance": "pass|partial|fail", "problem": "核心问题", "suggestion": "改进建议"}], '
+    '"common": "共性建议（跨题总结的1-2个系统性问题）"}'
+)
+
+
+def generate_review_report(records: list[dict], behaviors: list[str]) -> dict | None:
+    """面试结束后生成复盘报告。失败返回 None。"""
+    lines = []
+    for i, r in enumerate(records, 1):
+        lines.append(f"第{i}题：{r['question']}")
+        for t in r.get("transcript", []):
+            lines.append(f"  第{t['round']}轮回答：{t['answer'][:200]}")
+            lines.append(f"  面试官判断：{t.get('reason', '')}")
+            if t.get("followup_question"):
+                lines.append(f"  追问：{t['followup_question']}")
+        lines.append(f"  最终表现：{r['performance']}")
+    if behaviors:
+        lines.append(f"行为特征：{', '.join(behaviors)}")
+    try:
+        data = chat_json(_REVIEW_PROMPT, "\n".join(lines), max_tokens=4096)
+        return data if data.get("overall") or data.get("items") else None
+    except Exception as e:
+        logging.warning("复盘报告生成失败：%s", e)
+        return None
+
+
+def _format_review(report: dict) -> str:
+    """把复盘报告格式化成 markdown 文本（终端打印 + 落盘共用）。"""
+    lines = ["📋 面试复盘报告", "=" * 40, ""]
+    if report.get("overall"):
+        lines += ["【整体评价】", report["overall"], ""]
+    lines.append("【逐题复盘】")
+    for it in report.get("items", []):
+        emoji = {"pass": "✅", "partial": "⚠️", "fail": "❌"}.get(it.get("performance"), "❓")
+        lines.append(f"  {emoji} {it.get('question', '')}")
+        if it.get("problem"):
+            lines.append(f"     问题：{it['problem']}")
+        if it.get("suggestion"):
+            lines.append(f"     建议：{it['suggestion']}")
+    if report.get("common"):
+        lines += ["", "【共性建议】", report["common"]]
+    return "\n".join(lines)
+
+
+# ══════════ 单题面试（可测试的纯逻辑）══════════
+def interview_one(question: str, answer_fn, answer: str = "") -> tuple[str, str, list]:
+    """面试一道题，返回 (最终表现, 全部回答拼接, 逐轮对话记录)。
+
+    answer 是错题本里的参考答案（如果有），追问判断时优先用它做对照。
+    transcript 每轮记录 {round, answer, reason, followup_question, performance}，供复盘报告用。
+    """
+    points = get_expected_points(question, answer)
+    answers = []
+    transcript = []
+    performance = "partial"
+
+    for round_num in range(1, MAX_ROUNDS + 1):
+        answer = answer_fn(round_num).strip()
+        if not answer:
+            performance = "fail"
+            break
+        answers.append(answer)
+
+        judge = judge_followup(question, points, answer, round_num)
+        performance = judge.get("performance", "partial")
+        transcript.append({
+            "round": round_num,
+            "answer": answer,
+            "reason": judge.get("reason", ""),
+            "followup_question": judge.get("followup_question", ""),
+            "performance": judge.get("performance", "partial"),
+        })
+
+        if judge.get("need_followup") and round_num < MAX_ROUNDS:
+            fq = judge.get("followup_question", "").strip()
+            if fq:
+                print(f"\n💬 面试官追问：{fq}")
+                continue
+        break
+
+    return performance, "\n".join(answers), transcript
+
+
+# ══════════ 断点保护：边答边落盘 + 写库幂等重跑 ══════════
+# 面试结果每答完一题就落盘本地，任何一步崩溃最多丢「正在答的那一题」。
+# 写回用 record_result（纯函数）+ store_items（按 id 覆盖），且落盘存「原始 item 快照」，
+# 重跑结果一致 → 幂等，可重复恢复不重复涨 mastery。
+def _progress_file():
+    """当前空间的面试进度落盘文件（按空间分目录）。"""
+    return space_dir() / "interview_progress.json"
+
+
+def _q_dump(q: dict) -> dict:
+    return {
+        "question": q.get("question", ""),
+        "source": q.get("source", ""),
+        "topic": q.get("topic", ""),
+        "item_id": q.get("item_id"),
+        "section": q.get("section", ""),
+        "item": q["item"].model_dump(mode="json") if q.get("item") else None,
+    }
+
+
+def _r_dump(r: dict) -> dict:
+    return {
+        "question": r.get("question", ""),
+        "source": r.get("source", ""),
+        "topic": r.get("topic", ""),
+        "performance": r.get("performance", ""),
+        "answer": r.get("answer", ""),
+        "item": r["item"].model_dump(mode="json") if r.get("item") else None,
+    }
+
+
+def _save_progress(questions, answered, behaviors):
+    """把当前面试进度落盘。item 用快照序列化，None 保持 None。"""
+    try:
+        data = {
+            "questions": [_q_dump(q) for q in questions],
+            "answered": [_r_dump(r) for r in answered],
+            "behaviors": behaviors,
+        }
+        _progress_file().write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        logging.warning("面试进度落盘失败：%s", e)
+
+
+def _load_progress():
+    """读回上次的面试进度。文件缺失或损坏返回 None。"""
+    if not _progress_file().exists():
+        return None
+    try:
+        data = json.loads(_progress_file().read_text(encoding="utf-8"))
+        questions = [dict(q) for q in data.get("questions", [])]
+        for q in questions:
+            q["item"] = KnowledgeItem(**q["item"]) if q.get("item") else None
+        answered = [dict(r) for r in data.get("answered", [])]
+        for r in answered:
+            r["item"] = KnowledgeItem(**r["item"]) if r.get("item") else None
+        return {"questions": questions, "answered": answered, "behaviors": data.get("behaviors", [])}
+    except Exception as e:
+        logging.warning("面试进度读取失败：%s", e)
+        return None
+
+
+def _clear_progress():
+    """写库成功后清掉落盘，表示本场面试已完成。"""
+    try:
+        _progress_file().unlink(missing_ok=True)
+    except Exception as e:
+        logging.warning("清理面试进度失败：%s", e)
+
+
+def recover():
+    """把上次未写库的面试结果补写进知识库。幂等：可重复执行，不重复涨 mastery。"""
+    prog = _load_progress()
+    if not prog or not prog["answered"]:
+        print("没有需要恢复的面试。")
+        return
+    answered = prog["answered"]
+    behaviors = prog.get("behaviors", [])
+    print(f"发现上次未完成的面试：已答 {len(answered)} 题，正在补写...")
+    updated, new = _write_back(answered, behaviors)
+    store.store_items(updated + new)
+    _log_write_back(answered, updated)
+    _clear_progress()
+    print(f"补写完成（更新 {len(updated)} 题掌握度，新采集 {len(new)} 题进错题本）。")
+
+
+# ══════════ 主流程 ══════════
+def main():
+    print("=" * 60)
+    print("OfferLoop 模拟面试 · 结构化面试官")
+    print("=" * 60)
+
+    profile = _read_profile()
+    weak_items = get_weak_questions()
+
+    if not profile["resume"] and not profile["jd"] and not weak_items:
+        print("\n⚠️ 没有可面试的材料：")
+        print("   · 简历：把内容贴到 data/resume.md")
+        print("   · 岗位 JD：贴到 data/jd.md")
+        print("   · 错题本：先记几道错题（说「今天面了 X 被问 Y 没答上」）")
+        return
+
+    print("\n正在根据 简历 / JD / 错题本 生成结构化面试...")
+    sections = plan_interview(profile["resume"], profile["jd"], weak_items)
+
+    # 展开成题目列表，weak 题挂上对应 item 对象
+    weak_by_id = {it.id: it for it in weak_items}
+    questions = []
+    for sec in sections:
+        for q in sec.get("questions", []):
+            q = dict(q)
+            q["section"] = sec.get("name", "")
+            # 防御 LLM 标错：weak 题必须「题目 == 错题原文」才绑定 item，否则降级为 generic
+            if q.get("source") == "weak" and q.get("item_id"):
+                item = weak_by_id.get(q.get("item_id"))
+                if item and (q.get("question") or "").strip() == item.question.strip():
+                    q["item"] = item
+                else:
+                    q["item"] = None
+                    q["source"] = "generic"
+            else:
+                q["item"] = None
+            questions.append(q)
+
+    if not questions:
+        print("⚠️ 出题失败（可能 LLM 没返回计划），请重试。")
+        return
+
+    print(f"\n本轮共 {len(questions)} 题，按章节进行。每题最多追问 {MAX_FOLLOWUPS} 轮。")
+    _save_progress(questions, [], [])  # 面试开始：先落盘本场题目，防止中途崩溃全丢
+
+    results = []
+    current_section = None
+    for idx, q in enumerate(questions, 1):
+        if q["section"] != current_section:
+            current_section = q["section"]
+            print(f"\n{'=' * 50}\n【{current_section}】\n{'=' * 50}")
+
+        print(f"\n[第 {idx}/{len(questions)} 题] {q['question']}")
+
+        def _ask(_round):
+            return input("\n你的回答：")
+
+        try:
+            ref_answer = q["item"].answer if q["item"] else ""
+            performance, answer_text, transcript = interview_one(q["question"], _ask, ref_answer)
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n已退出模拟面试（已答的题会保存）。")
+            break
+
+        results.append({
+            "question": q["question"], "source": q.get("source", ""),
+            "topic": q.get("topic", ""), "item": q.get("item"),
+            "performance": performance, "answer": answer_text,
+            "transcript": transcript,
+        })
+        _save_progress(questions, results, [])  # 每答完一题就落盘，最多丢正在答的这一题
+
+        emoji = {"pass": "✅", "partial": "⚠️", "fail": "❌"}.get(performance, "❓")
+        print(f"\n{emoji} 本题表现：{performance.upper()}")
+
+    if not results:
+        print("没有已答的题，本次不保存。")
+        _clear_progress()
+        return
+
+    # ── 总结行为特征 + 写回 ──
+    print("\n" + "=" * 60)
+    print("面试结束，总结行为特征...")
+    behaviors = summarize_behaviors([
+        {"question": r["question"], "answer": r["answer"], "performance": r["performance"]}
+        for r in results
+    ])
+    _save_progress(questions, results, behaviors)  # 总结后落盘（恢复时不重调 LLM）
+
+    try:
+        updated_items, new_items = _write_back(results, behaviors)
+        store.store_items(updated_items + new_items)
+        _log_write_back(results, updated_items)
+        _clear_progress()  # 写库成功，清掉落盘
+    except Exception as e:
+        logging.warning("写库失败：%s", e)
+        _save_progress(questions, results, behaviors)
+        print("⚠️ 写库失败，结果已存到本地。")
+        print("   稍后重跑 `python run_mock_interview.py --recover` 补写（不会重复涨分）。")
+        return
+
+    # ── 本场总结 ──
+    print("\n" + "=" * 60)
+    print("📊 本场总结：")
+    for r in results:
+        emoji = {"pass": "✅", "partial": "⚠️", "fail": "❌"}.get(r["performance"], "❓")
+        if r.get("source") == "weak" and r.get("item"):
+            note = "（已更新掌握度）"
+        elif r["performance"] in ("fail", "partial"):
+            note = "（已采集进错题本）"
+        else:
+            note = ""
+        print(f"  {emoji} {r['question']}  {note}")
+
+    if behaviors:
+        print(f"\n🧠 你的行为特征：{', '.join(behaviors)}")
+        print("   （已写入错题本，下次面试前会提醒你注意）")
+    else:
+        print("\n本次未发现明显行为问题。")
+
+    # ── 复盘报告 ──
+    report = generate_review_report(results, behaviors)
+    if report:
+        text = _format_review(report)
+        print("\n" + text)
+        # 落盘复盘报告，供 offerloop「看复盘」事后查阅
+        try:
+            (space_dir() / "last_review.md").write_text(text, encoding="utf-8")
+        except Exception as e:
+            logging.warning("复盘报告落盘失败：%s", e)
+    else:
+        print("\n（复盘报告生成失败）")
+
+    print("\n完成。可用 python run_remind.py --notify 查看后续提醒。")
+
+
+if __name__ == "__main__":
+    # 解析 --space 参数（在 main/recover 之前，保证所有 space 相关路径/collection 生效）
+    import src.config as _cfg
+    if "--space" in sys.argv:
+        idx = sys.argv.index("--space") + 1
+        if idx < len(sys.argv):
+            _cfg.SPACE = sys.argv[idx]
+    if "--recover" in sys.argv:
+        recover()
+    else:
+        main()

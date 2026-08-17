@@ -2,29 +2,33 @@
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Optional
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
-from src.config import CHROMA_DIR
+from src import config
 from src.memory.embedding import embed_texts
 from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, ItemSource
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_NAME = "knowledge_items_v1"
-
 _client: Optional[chromadb.PersistentClient] = None
+
+
+def _collection_name() -> str:
+    """按空间分 collection：default 沿用 v1（向后兼容存量数据），其他空间独立。"""
+    return "knowledge_items_v1" if config.SPACE == "default" else f"knowledge_items_{config.SPACE}"
 
 
 def _get_client() -> chromadb.PersistentClient:
     global _client
     if _client is None:
-        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        config.CHROMA_DIR.mkdir(parents=True, exist_ok=True)
         _client = chromadb.PersistentClient(
-            path=str(CHROMA_DIR),
+            path=str(config.CHROMA_DIR),
             settings=ChromaSettings(anonymized_telemetry=False),
         )
     return _client
@@ -33,7 +37,7 @@ def _get_client() -> chromadb.PersistentClient:
 def get_collection() -> chromadb.Collection:
     client = _get_client()
     return client.get_or_create_collection(
-        name=COLLECTION_NAME,
+        name=_collection_name(),
         metadata={"hnsw:space": "cosine", "schema_version": "v1"},
     )
 
@@ -145,6 +149,177 @@ def search(
         return _parse_results(results)
 
 
+def _normalize(text: str) -> str:
+    """归一化题目：去空白、小写、去标点，用于精确去重。"""
+    t = re.sub(r"[\s\u3000]+", "", text.lower())
+    t = re.sub(r"[，。！？、,.!?：:；;()（）【】\[\]\"'“”‘’]", "", t)
+    return t
+
+
+def find_duplicates(
+    items: list[KnowledgeItem], threshold: float = 0.93,
+) -> list[tuple[str, str, float]]:
+    """对库查重：判断每道新题是否已存在。
+
+    用向量相似度——对每道新题 query 库里 top-1，相似度 >= threshold 视为重复。
+    完全相同文本 embedding 相同（cosine≈1.0），语义相近措辞不同也能抓。
+
+    Returns: [(新题question, 已有题question, 相似度)]，只含判定为重复的。
+    """
+    if not items:
+        return []
+    collection = get_collection()
+    if collection.count() == 0:
+        return []
+
+    embs = embed_texts([it.question for it in items])
+    results = collection.query(
+        query_embeddings=embs,
+        n_results=1,
+        include=["documents", "distances"],
+    )
+
+    docs = results.get("documents", [])
+    dists = results.get("distances", [])
+    dupes = []
+    for i, item in enumerate(items):
+        dist = None
+        if i < len(dists) and dists[i]:
+            dist = dists[i][0]
+        if dist is None:
+            continue
+        sim = round(1.0 - dist, 4)
+        if sim >= threshold:
+            existing_q = docs[i][0] if i < len(docs) and docs[i] else ""
+            dupes.append((item.question, existing_q, sim))
+    return dupes
+
+
+def dedupe_items(
+    items: list[KnowledgeItem], threshold: float = 0.93,
+) -> tuple[list[KnowledgeItem], list[dict]]:
+    """维护 Agent 去重编排：先批内精确去重，再对库做向量查重。
+
+    Returns:
+        kept: 保留（可入库）的题
+        reports: 去重报告，每项 {"kind": "within_batch"|"existing",
+                                "question": 新题, "existing": 匹配到的已有题或None, "sim": 相似度}
+    """
+    # 1. 批内精确去重（同一批里完全相同的题只留一道）
+    seen: set[str] = set()
+    unique: list[KnowledgeItem] = []
+    reports: list[dict] = []
+    for it in items:
+        key = _normalize(it.question)
+        if key in seen:
+            reports.append({"kind": "within_batch", "question": it.question, "existing": None, "sim": 1.0})
+            continue
+        seen.add(key)
+        unique.append(it)
+
+    # 2. 对库向量查重（语义相近 / 完全相同）
+    dupes = find_duplicates(unique, threshold=threshold)
+    dup_qs = {d[0] for d in dupes}
+    kept = [it for it in unique if it.question not in dup_qs]
+    for new_q, old_q, sim in dupes:
+        reports.append({"kind": "existing", "question": new_q, "existing": old_q, "sim": sim})
+
+    return kept, reports
+
+
+def find_intra_duplicates(threshold: float = 0.93) -> list[tuple[str, str, float]]:
+    """全库体检：找出库内语义重复的题对。
+
+    对每道题 query top-2（top-1 是自己，top-2 是最相似的别的题），
+    相似度 >= threshold 判定为一对重复。
+
+    Returns: [(题A, 题B, 相似度)]，已去重（A-B 与 B-A 只报一次）。
+    """
+    collection = get_collection()
+    n = collection.count()
+    if n < 2:
+        return []
+
+    got = collection.get(include=["documents"])
+    docs = got.get("documents", [])
+    if len(docs) < 2:
+        return []
+
+    embs = embed_texts(docs)
+    results = collection.query(
+        query_embeddings=embs,
+        n_results=2,
+        include=["documents", "distances"],
+    )
+
+    dists = results.get("distances", [])
+    qdocs = results.get("documents", [])
+    pairs: list[tuple[str, str, float]] = []
+    seen: set[tuple[str, str]] = set()
+    for i, q in enumerate(docs):
+        if i >= len(dists) or len(dists[i]) < 2:
+            continue
+        sim = round(1.0 - dists[i][1], 4)
+        if sim < threshold:
+            continue
+        other = qdocs[i][1] if i < len(qdocs) and len(qdocs[i]) > 1 else ""
+        if not other:
+            continue
+        key = tuple(sorted([_normalize(q), _normalize(other)]))
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append((q, other, sim))
+    return pairs
+
+
+def find_exact_duplicates() -> list[list[KnowledgeItem]]:
+    """找出完全相同的重复题（归一化后 question 相同），返回重复组列表（每组 >1 条）。"""
+    items = search(top_k=1000)
+    groups: dict[str, list[KnowledgeItem]] = {}
+    for it in items:
+        key = _normalize(it.question)
+        groups.setdefault(key, []).append(it)
+    return [g for g in groups.values() if len(g) > 1]
+
+
+def delete_by_ids(ids: list[str]) -> int:
+    """按 id 删除，返回删除数量。"""
+    if not ids:
+        return 0
+    collection = get_collection()
+    collection.delete(ids=ids)
+    return len(ids)
+
+
+def auto_clean() -> dict:
+    """维护 Agent 自动清理：删掉完全相同的重复题，每组保留信息最全的一条。
+
+    这是确定性判断（归一化后完全相同），不需要用户确认。
+    返回 {"removed": 删除数, "groups": 重复组数}。
+    """
+    groups = find_exact_duplicates()
+    if not groups:
+        return {"removed": 0, "groups": 0}
+
+    def _priority(it: KnowledgeItem) -> int:
+        p = 0
+        if it.answer:  # 有参考答案的优先保留
+            p += 10
+        status_rank = {"fail": 3, "unknown": 2, "pass": 1, "partial": 0}
+        p += status_rank.get(it.status.value, 0)  # 错题优先（信息价值更高）
+        return p
+
+    to_delete: list[str] = []
+    for g in groups:
+        g_sorted = sorted(g, key=_priority, reverse=True)
+        for dup in g_sorted[1:]:
+            to_delete.append(dup.id)
+
+    removed = delete_by_ids(to_delete)
+    return {"removed": removed, "groups": len(groups)}
+
+
 def get_stats() -> dict:
     """统计各 status 数量 + 热门 topic + 来源分布。"""
     items = search(top_k=1000)
@@ -177,7 +352,7 @@ def clear() -> None:
     """清空 collection（测试用）。"""
     client = _get_client()
     try:
-        client.delete_collection(COLLECTION_NAME)
+        client.delete_collection(_collection_name())
     except Exception:
         pass
 
@@ -185,6 +360,8 @@ def clear() -> None:
 def _to_metadata(item: KnowledgeItem) -> dict:
     return {
         "question": item.question,
+        "answer": item.answer,
+        "question_type": item.question_type,
         "topic": item.topic,
         "company": item.company,
         "role": item.role,
@@ -199,6 +376,7 @@ def _to_metadata(item: KnowledgeItem) -> dict:
         "review_count": item.review_count,
         "created_at": item.created_at.isoformat() if item.created_at else "",
         "history": json.dumps(item.history, ensure_ascii=False),
+        "behavior_tags": json.dumps(item.behavior_tags, ensure_ascii=False),
     }
 
 
@@ -254,9 +432,17 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
         except (TypeError, ValueError):
             history = []
 
+        # 行为特征：老数据无 behavior_tags key → 默认空 list
+        try:
+            behavior_tags = json.loads(meta.get("behavior_tags", "[]"))
+        except (TypeError, ValueError):
+            behavior_tags = []
+
         item = KnowledgeItem(
             id=item_id,
             question=meta.get("question", doc),
+            answer=meta.get("answer", ""),
+            question_type=meta.get("question_type", ""),
             topic=meta.get("topic", ""),
             category=category,
             company=meta.get("company", ""),
@@ -269,6 +455,7 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
             mastery_score=float(meta.get("mastery_score", 1.0)),
             review_count=int(meta.get("review_count", 0)),
             source=source,
+            behavior_tags=behavior_tags,
             last_reviewed_at=datetime.fromisoformat(last_reviewed) if last_reviewed else None,
             created_at=datetime.fromisoformat(meta["created_at"]) if meta.get("created_at") else None,
         )

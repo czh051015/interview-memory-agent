@@ -2,7 +2,7 @@
 
 三个核心函数：
 - decay   掌握度衰减：mastery(t) = mastery × e^(-λt)，λ=0.05（艾宾浩斯遗忘曲线）
-- review  复习重置：mastery = min(1.0, 上次 × 1.2)，review_count +1，更新复习时间
+- review  复习重置：mastery = min(1.0, 上次 × 1.5)，review_count +1，更新复习时间
 - rank    双因子召回排序：relevance×0.5 + importance×0.5
 
 设计约定：
@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from datetime import datetime
 
-from src.cleaner.schema import KnowledgeItem, ItemStatus
+from src.cleaner.schema import KnowledgeItem, ItemStatus, utcnow
 
 # 遗忘速率（每天衰减比例），phase-2-plan §3.3：λ=0.05
 LAMBDA = 0.05
@@ -70,7 +70,7 @@ def _elapsed_days(item: KnowledgeItem, now: datetime) -> float:
 
 def effective_mastery(item: KnowledgeItem, now: datetime | None = None) -> float:
     """当前有效掌握度 = 存储值按距上次复习天数衰减。"""
-    return decay(item.mastery_score, _elapsed_days(item, now or datetime.utcnow()))
+    return decay(item.mastery_score, _elapsed_days(item, now or utcnow()))
 
 
 def review(item: KnowledgeItem, now: datetime | None = None) -> KnowledgeItem:
@@ -83,7 +83,7 @@ def review(item: KnowledgeItem, now: datetime | None = None) -> KnowledgeItem:
         update={
             "mastery_score": round(bumped, 4),
             "review_count": item.review_count + 1,
-            "last_reviewed_at": now or datetime.utcnow(),
+            "last_reviewed_at": now or utcnow(),
         }
     )
 
@@ -99,7 +99,21 @@ def review_fail(item: KnowledgeItem, now: datetime | None = None) -> KnowledgeIt
         update={
             "mastery_score": round(dropped, 4),
             "review_count": item.review_count + 1,
-            "last_reviewed_at": now or datetime.utcnow(),
+            "last_reviewed_at": now or utcnow(),
+        }
+    )
+
+
+def review_partial(item: KnowledgeItem, now: datetime | None = None) -> KnowledgeItem:
+    """复习半对：mastery 保持不动，只 review_count +1、更新复习时间（重置衰减起点）。
+
+    半对 = 还懂一点但没答全，掌握度既不涨也不降，但「练过了」要重置遗忘时钟，
+    否则 last_reviewed_at 不更新、gap 会按旧时间继续衰减，把半对的题误判成快忘。
+    """
+    return item.model_copy(
+        update={
+            "review_count": item.review_count + 1,
+            "last_reviewed_at": now or utcnow(),
         }
     )
 
@@ -121,7 +135,7 @@ def rank(
     排序结果附在每个 item 的 _recall_score 上（与 _similarity 同款模式），
     排序稳定：同分保持原顺序。
     """
-    when = now or datetime.utcnow()
+    when = now or utcnow()
     relevances = relevances or {}
 
     for item in items:

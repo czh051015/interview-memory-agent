@@ -58,53 +58,72 @@ class TestDecomposeResult:
 
 
 class TestDecompose:
-    """拆解管线测试（mock LLM）。"""
+    """拆解管线测试（mock LLM，分流设计：统一 unknown + suspected_fail）。"""
 
     @patch("src.cleaner.decompose.chat_json")
-    def test_decompose_basic(self, mock_chat):
+    def test_decompose_all_unknown(self, mock_chat):
+        """分流设计：导入面经不猜 status，全部 unknown 进知识库。"""
         mock_chat.return_value = {
             "company": "字节",
             "role": "AI应用开发",
             "round": "一面",
             "date": "2026-07-14",
             "items": [
-                {"question": "RRF原理？", "topic": "混合检索", "user_note": "忘了", "status": "fail"},
-                {"question": "Agent安全？", "topic": "Agent", "user_note": "不会", "status": "fail"},
-                {"question": "单例模式？", "topic": "设计模式", "user_note": "过了", "status": "pass"},
+                {"question": "RRF原理？", "topic": "混合检索", "user_note": "忘了"},
+                {"question": "单例模式？", "topic": "设计模式", "user_note": "过了"},
             ],
         }
 
         from src.cleaner.decompose import decompose
 
-        result = decompose("字节一面：RRF忘了，Agent安全不会，单例过了")
-        assert result.total_count == 3
+        result = decompose("字节一面：RRF忘了，单例过了")
+        assert result.total_count == 2
         assert result.company == "字节"
-        assert result.unknown_count == 0
-
-        statuses = {item.status for item in result.items}
-        assert ItemStatus.FAIL in statuses
-        assert ItemStatus.PASS in statuses
+        assert result.unknown_count == 2  # 全部 unknown，不再猜 fail/pass
+        assert result.suspected_fail is False  # 无段级声明
+        assert all(item.status == ItemStatus.UNKNOWN for item in result.items)
 
     @patch("src.cleaner.decompose.chat_json")
-    def test_decompose_rule_override(self, mock_chat):
-        """规则覆盖 LLM：LLM 返回 unknown，规则兜底修正。"""
+    def test_decompose_suspected_fail(self, mock_chat):
+        """段级声明"没答上"→ suspected_fail=True，但题仍 unknown（待用户确认）。"""
         mock_chat.return_value = {
             "company": "",
             "role": "",
             "round": "",
             "date": "",
+            "default_status": "fail",
             "items": [
-                {"question": "Q1", "topic": "", "user_note": "答得一坨", "status": "unknown"},
-                {"question": "Q2", "topic": "", "user_note": "秒了", "status": "unknown"},
+                {"question": "Q1", "topic": "", "user_note": ""},
+                {"question": "Q2", "topic": "", "user_note": ""},
             ],
         }
 
         from src.cleaner.decompose import decompose
 
-        result = decompose("Q1答得一坨 Q2秒了")
+        result = decompose("这些我都没答上来：Q1、Q2")
         assert result.total_count == 2
-        # 规则应覆盖 LLM 的 unknown
-        item1 = result.items[0]
-        item2 = result.items[1]
-        assert item1.status == ItemStatus.FAIL  # "答得一坨" → fail
-        assert item2.status == ItemStatus.PASS  # "秒了" → pass
+        assert result.suspected_fail is True  # 段级声明"没答上"
+        assert all(item.status == ItemStatus.UNKNOWN for item in result.items)  # 但题仍 unknown
+
+    @patch("src.cleaner.decompose.chat_json")
+    def test_decompose_answer_points_not_suspected(self, mock_chat):
+        """回答要点 → suspected_fail=False，题 unknown，参考答案存进 answer。"""
+        mock_chat.return_value = {
+            "company": "",
+            "role": "",
+            "round": "",
+            "date": "",
+            "default_status": "pass",
+            "items": [
+                {"question": "Q1", "topic": "", "user_note": "", "answer": "答案1"},
+                {"question": "Q2", "topic": "", "user_note": "", "answer": "答案2"},
+            ],
+        }
+
+        from src.cleaner.decompose import decompose
+
+        result = decompose("回答要点：Q1答案1 Q2答案2")
+        assert result.total_count == 2
+        assert result.suspected_fail is False
+        assert all(item.status == ItemStatus.UNKNOWN for item in result.items)
+        assert all(item.answer for item in result.items)  # 答案保留
