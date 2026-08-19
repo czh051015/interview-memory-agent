@@ -1,23 +1,17 @@
-"""空间隔离测试：collection 名 + 文件目录按 space 分。"""
+"""空间隔离测试：单 collection + metadata space 过滤 + 文件目录按 space 分。"""
 
 import src.config as config
 from src.memory import knowledge_store
 
 
-def test_collection_name_default():
-    """default 空间沿用 v1 collection 名，向后兼容存量数据。"""
-    old = config.SPACE
-    try:
-        config.SPACE = "default"
+def test_collection_name_always_v1(monkeypatch):
+    """所有空间共用 knowledge_items_v1（v2 架构：隔离靠 metadata.space，不靠 collection 名）。
+
+    历史：v1 曾按空间分 collection，中文 space 名（试玩/秋招）在 Chroma 非法会崩。
+    """
+    for sp in ("default", "秋招", "试玩", "agentops_m1_test"):
+        monkeypatch.setattr(config, "SPACE", sp)
         assert knowledge_store._collection_name() == "knowledge_items_v1"
-    finally:
-        config.SPACE = old
-
-
-def test_collection_name_per_space(monkeypatch):
-    """非 default 空间独立 collection。"""
-    monkeypatch.setattr(config, "SPACE", "秋招")
-    assert knowledge_store._collection_name() == "knowledge_items_秋招"
 
 
 def test_space_dir_per_space(tmp_path, monkeypatch):

@@ -19,8 +19,13 @@ _client: Optional[chromadb.PersistentClient] = None
 
 
 def _collection_name() -> str:
-    """按空间分 collection：default 沿用 v1（向后兼容存量数据），其他空间独立。"""
-    return "knowledge_items_v1" if config.SPACE == "default" else f"knowledge_items_{config.SPACE}"
+    """统一单 collection + metadata.space 过滤（v2 架构）。
+
+    历史：v1 曾按空间分 collection（knowledge_items_{SPACE}），中文 space 名在
+    Chroma 非法（仅允许 [a-zA-Z0-9._-]）→ CLI `--space 试玩` 直接崩。
+    现在所有空间共享 knowledge_items_v1，靠 search/store 的 space 参数严格过滤。
+    """
+    return "knowledge_items_v1"
 
 
 def _get_client() -> chromadb.PersistentClient:
@@ -82,6 +87,7 @@ def search(
     company: Optional[str] = None,
     status: Optional[str] = None,
     source: Optional[str] = None,
+    space: Optional[str] = None,
     top_k: int = 20,
     similarity_threshold: Optional[float] = None,
 ) -> list[KnowledgeItem]:
@@ -89,11 +95,14 @@ def search(
 
     - 有 query → 语义搜索（cosine similarity）
     - 无 query → 只按 metadata 过滤（全量）
-    - topic/company/status/source → metadata 精确过滤
+    - topic/company/status/source/space → metadata 精确过滤
     - similarity_threshold → 语义搜索时，低于此值的条目被丢弃（建议 0.3-0.5）
 
     注意：source 过滤依赖 metadata 里存在 source key。
     存量旧数据（v1.0 入库）没有该 key，跑 run_interview.py --fresh 重新 upsert 补齐。
+    space：严格过滤（2026-08-19 起）。v1.0 存量已由 run_backfill_space.py 补齐
+    space=default，所以「不传 space = 不过滤（全空间）」与「space=default = 只 default」
+    语义明确分离。空间隔离 B 方案：default 只含 default，不再吞并其他空间。
 
     Returns: KnowledgeItem 列表（按相似度降序）
     """
@@ -109,6 +118,8 @@ def search(
         where_parts.append({"status": status})
     if source:
         where_parts.append({"source": source})
+    if space:
+        where_parts.append({"space": space})
 
     where_filter = None
     if len(where_parts) == 1:
@@ -283,6 +294,18 @@ def find_exact_duplicates() -> list[list[KnowledgeItem]]:
     return [g for g in groups.values() if len(g) > 1]
 
 
+def get_by_id(item_id: str) -> Optional[KnowledgeItem]:
+    """按 id 查单条。不存在返回 None（模拟面试写回 / Web 判定用）。"""
+    if not item_id:
+        return None
+    collection = get_collection()
+    if collection.count() == 0:
+        return None
+    results = collection.get(ids=[item_id], include=["documents", "metadatas"])
+    items = _parse_results(results)
+    return items[0] if items else None
+
+
 def delete_by_ids(ids: list[str]) -> int:
     """按 id 删除，返回删除数量。"""
     if not ids:
@@ -320,9 +343,11 @@ def auto_clean() -> dict:
     return {"removed": removed, "groups": len(groups)}
 
 
-def get_stats() -> dict:
-    """统计各 status 数量 + 热门 topic + 来源分布。"""
+def get_stats(space: str | None = None) -> dict:
+    """统计各 status 数量 + 热门 topic + 来源分布。space 传则只统计该空间。"""
     items = search(top_k=1000)
+    if space:
+        items = [it for it in items if (it.space or "default") == space]
 
     status_count = {"fail": 0, "partial": 0, "pass": 0, "unknown": 0}
     topic_count: dict[str, int] = {}
@@ -367,6 +392,7 @@ def _to_metadata(item: KnowledgeItem) -> dict:
         "role": item.role,
         "round": item.round,
         "date": item.date,
+        "space": item.space or "default",
         "status": item.status.value,
         "user_note": item.user_note[:200],  # 截断
         "category": item.category.value,
@@ -449,6 +475,7 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
             role=meta.get("role", ""),
             round=meta.get("round", ""),
             date=meta.get("date", ""),
+            space=meta.get("space", "default"),
             status=status,
             history=history,
             user_note=meta.get("user_note", ""),

@@ -27,6 +27,7 @@ from src.memory.mastery import (
 )
 from src.cleaner.schema import utcnow, ItemCategory
 from src.config import DATA_DIR, space_dir
+import src.config as _cfg  # noqa: E402  （SPACE：OFFERLOOP_SPACE 环境变量切换）
 
 VIZ_DIR = DATA_DIR / "viz"
 OUT = VIZ_DIR / "report.html"
@@ -158,7 +159,10 @@ def _demo_trajectories() -> list[dict]:
 
 def collect(include_demo: bool = False) -> dict:
     now = utcnow()
-    items = store.search(status="fail", top_k=1000) + store.search(status="partial", top_k=1000)
+    items = (
+        store.search(status="fail", space=_cfg.SPACE, top_k=1000)
+        + store.search(status="partial", space=_cfg.SPACE, top_k=1000)
+    )
     # 信息性问题（自我介绍/薪酬期望/哪里人）不算「错题」，过滤掉（ISSUES F2 既定结论）
     items = [it for it in items if it.category != ItemCategory.INFO]
 

@@ -20,12 +20,13 @@ from src.memory import knowledge_store as store
 from src.memory import review_log
 from src.memory.mastery import rank, review, review_fail, effective_mastery
 from src.cleaner.schema import KnowledgeItem, utcnow
+import src.config as _cfg  # noqa: E402  （SPACE：OFFERLOOP_SPACE 环境变量切换）
 
 
 def load_review_items() -> list[KnowledgeItem]:
-    """拿所有 fail + partial 的题（pass/unknown 过滤）。"""
-    fails = store.search(status="fail", top_k=1000)
-    partials = store.search(status="partial", top_k=1000)
+    """拿所有 fail + partial 的题（pass/unknown 过滤），限当前空间。"""
+    fails = store.search(status="fail", space=_cfg.SPACE, top_k=1000)
+    partials = store.search(status="partial", space=_cfg.SPACE, top_k=1000)
     return fails + partials
 
 

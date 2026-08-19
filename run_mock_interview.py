@@ -25,6 +25,7 @@ except (AttributeError, ValueError, OSError):
     pass
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
+import src.config as _cfg  # noqa: E402  （SPACE 全局：CLI --space 切换）
 from src.config import DATA_DIR, space_dir
 from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemSource, utcnow
 from src.cleaner.state_machine import record_birth
@@ -48,8 +49,9 @@ MIN_SECTION_QUESTIONS = 1  # 动态循环：单章节最少题数（保证章节
 def get_weak_questions(top_k: int = WEAK_POOL_SIZE, space: str | None = None):
     """读错题本 fail/partial，rank 排序取最薄弱的前 top_k（作为技术验证章的候选）。
 
-    space：Web 版多租户过滤（CLI 默认 None=不过滤）。
+    space：Web 版多租户过滤（CLI 默认 None=当前 config.SPACE 空间）。
     """
+    space = space or _cfg.SPACE
     fails = store.search(status="fail", space=space, top_k=1000)
     partials = store.search(status="partial", space=space, top_k=1000)
     items = fails + partials
@@ -942,7 +944,6 @@ def main():
 
 if __name__ == "__main__":
     # 解析 --space 参数（在 main/recover 之前，保证所有 space 相关路径/collection 生效）
-    import src.config as _cfg
     if "--space" in sys.argv:
         idx = sys.argv.index("--space") + 1
         if idx < len(sys.argv):

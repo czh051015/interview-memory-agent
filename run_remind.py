@@ -30,13 +30,14 @@ except (AttributeError, ValueError, OSError):
 from src.memory import knowledge_store as store
 from src.memory.mastery import rank, effective_mastery, _elapsed_days
 from src.cleaner.schema import utcnow
+import src.config as _cfg  # noqa: E402  （SPACE：--space / OFFERLOOP_SPACE 切换）
 
 
 def _load_review_items() -> list:
-    """所有 fail + partial 的题（pass/unknown 过滤）。"""
+    """所有 fail + partial 的题（pass/unknown 过滤），限当前空间。"""
     return (
-        store.search(status="fail", top_k=1000)
-        + store.search(status="partial", top_k=1000)
+        store.search(status="fail", space=_cfg.SPACE, top_k=1000)
+        + store.search(status="partial", space=_cfg.SPACE, top_k=1000)
     )
 
 
