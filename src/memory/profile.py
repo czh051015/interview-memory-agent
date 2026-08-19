@@ -26,6 +26,7 @@ from datetime import datetime
 from src.memory import knowledge_store as store
 from src.memory.mastery import effective_mastery, _elapsed_days
 from src.cleaner.schema import utcnow, ItemSource, ItemStatus
+from src.llm import chat_json
 from src.config import space_dir
 
 logger = logging.getLogger(__name__)
@@ -255,6 +256,35 @@ def _save(profile: UserProfile, space: str) -> None:
         path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError as e:
         logger.warning("画像落盘失败：%s", e)
+
+
+# ── LLM 提炼（P1）：基于确定性统计写建议文字。失败降级纯统计版（summary 空）。 ──
+_REFINE_PROMPT = (
+    "你是 OfferLoop 的记忆管家，基于候选人的弱点统计写一段面试建议。你会收到："
+    "弱点主题列表（含加权 fail 次数、avg gap、趋势、代表题）、成长轨迹、行为标签。\n"
+    "任务：写一段给「面试官」的 2-3 句建议：指出面试时最该重点验证的主题、怎么问（换角度/深挖/降低难度），"
+    "以及行为上值得留意的点。只输出 JSON：{\"summary\": \"建议文字\"}\n"
+    "要求：只基于给定统计事实，不要编造未提供的弱点或经历。"
+)
+
+
+def refine_summary(profile: UserProfile) -> str:
+    """LLM 提炼画像建议。失败返回 ''（纯统计版降级，不阻塞）。"""
+    if profile.empty:
+        return ""
+    lines = ["弱点主题："]
+    for t in profile.weak_topics[:5]:
+        lines.append(f"- {t.topic}（加权fail {t.weighted_fail}，avg gap {t.avg_gap}，趋势 {t.trend}）")
+    if profile.growth:
+        lines.append(f"成长：{len(profile.growth)} 条复习回升")
+    if profile.behaviors:
+        lines.append(f"行为标签：{'、'.join(profile.behaviors)}")
+    try:
+        data = chat_json(_REFINE_PROMPT, "\n".join(lines), max_tokens=512)
+        return str(data.get("summary", "")).strip()
+    except Exception as e:
+        logger.warning("画像建议提炼失败，降级纯统计版：%s", e)
+        return ""
 
 
 def load_profile(space: str | None = None) -> UserProfile:

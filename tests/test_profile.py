@@ -146,3 +146,83 @@ class TestColdStartAndPersistence:
         (tmp_path / "profile.json").write_text("{broken", encoding="utf-8")
         p = prof.load_profile("default")
         assert p.empty
+
+
+class TestRefineSummary:
+    def test_refine_success(self):
+        """LLM 正常返回 → summary 有值。"""
+        p = prof.UserProfile(
+            weak_topics=[prof.TopicProfile(topic="线程池", weighted_fail=2.0,
+                                           raw_fail_count=2, max_gap=0.7, avg_gap=0.6,
+                                           trend="stable", tier="red")],
+        )
+        with patch.object(prof, "chat_json", return_value={"summary": "重点验证线程池"}):
+            s = prof.refine_summary(p)
+        assert s == "重点验证线程池"
+
+    def test_refine_failure_degrades_to_empty(self):
+        """LLM 挂了 → 返回空串（纯统计版降级，不抛异常）。"""
+        p = prof.UserProfile(
+            weak_topics=[prof.TopicProfile(topic="线程池", weighted_fail=2.0,
+                                           raw_fail_count=2, max_gap=0.7, avg_gap=0.6,
+                                           trend="stable", tier="red")],
+        )
+        with patch.object(prof, "chat_json", side_effect=RuntimeError("llm down")):
+            s = prof.refine_summary(p)
+        assert s == ""
+
+    def test_refine_empty_profile_skips_llm(self):
+        """空画像不调 LLM（冷启动）。"""
+        p = prof.UserProfile()
+        with patch.object(prof, "chat_json") as m:
+            assert prof.refine_summary(p) == ""
+        m.assert_not_called()
+
+    def test_weak_topic_names_limit(self):
+        """weak_topic_names 只返回 top3 主题名（decide_next 省 token）。"""
+        p = prof.UserProfile(weak_topics=[
+            prof.TopicProfile(topic=f"T{i}", weighted_fail=2.0, raw_fail_count=2,
+                              max_gap=0.5, avg_gap=0.4, trend="stable", tier="red")
+            for i in range(5)
+        ])
+        assert p.weak_topic_names() == ["T0", "T1", "T2"]
+
+
+class TestRefineSummary:
+    def test_refine_success(self):
+        """LLM 正常返回 → summary 有值。"""
+        p = prof.UserProfile(
+            weak_topics=[prof.TopicProfile(topic="线程池", weighted_fail=2.0,
+                                           raw_fail_count=2, max_gap=0.7, avg_gap=0.6,
+                                           trend="stable", tier="red")],
+        )
+        with patch.object(prof, "chat_json", return_value={"summary": "重点验证线程池"}):
+            s = prof.refine_summary(p)
+        assert s == "重点验证线程池"
+
+    def test_refine_failure_degrades_to_empty(self):
+        """LLM 挂了 → 返回空串（纯统计版降级，不抛异常）。"""
+        p = prof.UserProfile(
+            weak_topics=[prof.TopicProfile(topic="线程池", weighted_fail=2.0,
+                                           raw_fail_count=2, max_gap=0.7, avg_gap=0.6,
+                                           trend="stable", tier="red")],
+        )
+        with patch.object(prof, "chat_json", side_effect=RuntimeError("llm down")):
+            s = prof.refine_summary(p)
+        assert s == ""
+
+    def test_refine_empty_profile_skips_llm(self):
+        """空画像不调 LLM（冷启动）。"""
+        p = prof.UserProfile()
+        with patch.object(prof, "chat_json") as m:
+            assert prof.refine_summary(p) == ""
+        m.assert_not_called()
+
+    def test_weak_topic_names_limit(self):
+        """weak_topic_names 只返回 top3 主题名（decide_next 省 token）。"""
+        p = prof.UserProfile(weak_topics=[
+            prof.TopicProfile(topic=f"T{i}", weighted_fail=2.0, raw_fail_count=2,
+                              max_gap=0.5, avg_gap=0.4, trend="stable", tier="red")
+            for i in range(5)
+        ])
+        assert p.weak_topic_names() == ["T0", "T1", "T2"]

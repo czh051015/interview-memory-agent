@@ -127,10 +127,17 @@ _PLAN_PROMPT = (
 )
 
 
-def plan_interview(resume: str, jd: str, weak_items: list, focus_topics: list[str] | None = None) -> list[dict]:
+def plan_interview(
+    resume: str,
+    jd: str,
+    weak_items: list,
+    focus_topics: list[str] | None = None,
+    profile_text: str = "",
+) -> list[dict]:
     """LLM 生成章节化面试计划。失败返回 []（主流程提示重试）。
 
     focus_topics：记忆管家提炼的薄弱主题（可选），注入技术验证章出题优先覆盖。
+    profile_text：用户画像文本（P1，可选），给面试官「候选人是谁」的全局视角。
     """
     weak_str = "\n".join(f"- [{it.id}] {it.question}" for it in weak_items) if weak_items else "（无）"
     topics_str = "、".join(focus_topics) if focus_topics else "（无）"
@@ -139,6 +146,7 @@ def plan_interview(resume: str, jd: str, weak_items: list, focus_topics: list[st
         f"## 岗位 JD\n{jd or '（未提供）'}\n\n"
         f"## 历史薄弱项\n{weak_str}\n\n"
         f"## 记忆管家薄弱主题\n{topics_str}"
+        + (f"\n\n## 候选人画像\n{profile_text}" if profile_text else "")
     )
     try:
         data = chat_json(_PLAN_PROMPT, user_prompt, max_tokens=4096)
@@ -174,8 +182,13 @@ def decide_next(
     section_asked: int,
     remaining_sections: list[str],
     asked_before: list[str],
+    weak_topics: list[str] | None = None,
 ) -> dict:
-    """动态循环决策：LLM 输出 {action, guidance, reason}，兜底 switch。"""
+    """动态循环决策：LLM 输出 {action, guidance, reason}，兜底 switch。
+
+    weak_topics：画像的稳定弱点主题（可选），深挖时引导往弱点方向钻。
+    """
+    topics_str = "、".join(weak_topics) if weak_topics else "（无）"
     user_prompt = (
         f"当前章节：{section}\n"
         f"刚答完的题：{last_question}\n"
@@ -183,7 +196,8 @@ def decide_next(
         f"判断依据：{reason}\n"
         f"本章已问题数：{section_asked}\n"
         f"剩余章节：{remaining_sections or '（无，本章是最后一章）'}\n"
-        f"本场已问题目：{asked_before or '（无）'}"
+        f"本场已问题目：{asked_before or '（无）'}\n"
+        f"画像稳定弱点主题（深挖方向参考）：{topics_str}"
     )
     try:
         data = chat_json(_DECIDE_NEXT_PROMPT, user_prompt)
@@ -719,12 +733,14 @@ def run_dynamic_session(
     ask_fn,
     on_save=None,
     interrupted: bool = False,
+    weak_topics: list[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """动态面试状态机：选下一题 → 出题 → 等回答 → 追问 → 决策 → 循环。
 
     硬约束（系统侧）：章节顺序不跳（sec_idx 只前进）、每章 ≥1 题、
     单章 ≤MAX_SECTION_QUESTIONS、整场 ≤MAX_TOTAL_QUESTIONS。
     决策全在 LLM（decide_next / generate_dynamic_question），系统只卡边界。
+    weak_topics：画像稳定弱点（可选），注入 decide_next 引导深挖方向。
 
     返回 (questions, results)。ask_fn 由调用方注入（CLI=stdin，测试=脚本答案）。
     interrupted=True 时遇到 KeyboardInterrupt/EOFError 静默退出（已答保存）。
@@ -810,6 +826,7 @@ def run_dynamic_session(
             decision = decide_next(
                 section, q["question"], performance, last_judge.get("reason", ""),
                 sec_asked.get(section, 0), remaining, asked_before,
+                weak_topics=weak_topics,
             )
         next_action = decision["action"]
         if decision.get("reason"):
@@ -842,19 +859,35 @@ def main():
         print("   · 错题本：先记几道错题（说「今天面了 X 被问 Y 没答上」）")
         return
 
-    # 记忆管家：先读记忆状态 → 提炼薄弱主题 → 注入出题（出题靠记忆的闭环）
+    # 记忆管家：读记忆状态 + 用户画像 → 注入出题（出题靠记忆的闭环）
     focus_topics: list[str] = []
+    profile_text: str = ""
+    user_profile = None  # 兜底：异常时保持 None，出题不依赖画像
     try:
         from src.memory import memory_keeper as keeper
+        from src.memory import profile as profile_mod
         keeper_plan = keeper.run(_cfg.SPACE, notify=False)
         focus_topics = keeper_plan.get("focus_topics") or []
+        # 用户画像（P1）：确定性聚合 + LLM 提炼，空画像降级（冷启动）
+        user_profile = profile_mod.build_profile(_cfg.SPACE, save=True)
+        if user_profile.summary:
+            pass
+        elif not user_profile.empty:
+            user_profile.summary = profile_mod.refine_summary(user_profile)
+            profile_mod._save(user_profile, _cfg.SPACE)
+        profile_text = user_profile.to_prompt_text()
         if focus_topics:
             print(f"🧠 记忆管家薄弱主题：{'、'.join(focus_topics)} → 技术验证章优先覆盖")
+        if profile_text:
+            print("📋 已生成用户画像（弱点地图），面试官将据此出题")
     except Exception as e:
-        logging.warning("记忆管家薄弱主题读取失败，继续出题：%s", e)
+        logging.warning("记忆管家/画像读取失败，继续出题：%s", e)
 
-    print("\n正在根据 简历 / JD / 错题本 生成结构化面试...")
-    sections = plan_interview(profile["resume"], profile["jd"], weak_items, focus_topics=focus_topics)
+    print("\n正在根据 简历 / JD / 错题本 / 用户画像 生成结构化面试...")
+    sections = plan_interview(
+        profile["resume"], profile["jd"], weak_items,
+        focus_topics=focus_topics, profile_text=profile_text,
+    )
 
     # 展开成章节化题目池（动态循环的「种子题」：每章先用计划题，深挖/换题时现场出）
     weak_by_id = {it.id: it for it in weak_items}
@@ -895,6 +928,7 @@ def main():
         ask_fn=lambda _round: input("\n你的回答："),
         on_save=lambda qs, rs: _save_progress(qs, rs, []),
         interrupted=True,
+        weak_topics=user_profile.weak_topic_names() if user_profile else None,
     )
 
     if not results:
