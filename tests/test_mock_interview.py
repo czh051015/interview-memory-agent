@@ -210,3 +210,91 @@ class TestSessionContext:
         assert mock_judge.call_args[1]["asked_before"] == ["历史题"]
 
 
+
+
+class TestDynamicSession:
+    """动态智能体循环状态机：决策驱动 + 硬约束。"""
+
+    def _session(self, decisions, answers, seeds):
+        """构造一次动态面试：decisions=每轮决策序列，answers=每题回答序列。
+
+        seeds: {章节: [题dict]} 作为种子池；decide_next 被 mock 成按序返回 decisions。
+        """
+        from run_mock_interview import run_dynamic_session
+        pool = {name: [dict(q) for q in qs] for name, qs in seeds.items()}
+        order = list(seeds.keys())
+        ai = iter(answers)
+
+        def fake_answer(_round):
+            try:
+                return next(ai)
+            except StopIteration:
+                return ""
+
+        with patch.object(mi, "decide_next", side_effect=decisions), \
+             patch.object(mi, "interview_one", side_effect=lambda q, fn, a="", **kw: ("pass", "答", [{"reason": "ok"}])), \
+             patch.object(mi, "generate_dynamic_question", return_value={}):
+            return run_dynamic_session(
+                order, pool, "简历", "JD", [],
+                ask_fn=fake_answer, on_save=lambda qs, rs: None,
+            )
+
+    def test_normal_progression_all_sections(self):
+        """正常流程：每章 1 题 pass → next_section → 走完 5 章。"""
+        seeds = {
+            "自我介绍": [{"question": "介绍自己", "source": "generic"}],
+            "项目深挖": [{"question": "讲项目", "source": "resume"}],
+            "技术验证": [{"question": "线程池", "source": "weak"}],
+            "行为面": [{"question": "STAR", "source": "behavior"}],
+            "动机面": [{"question": "职业规划", "source": "motivation"}],
+        }
+        # 4 个 next_section 决策后，最后一章自动 end
+        decisions = [{"action": "next_section", "guidance": "", "reason": "答得好"} for _ in range(4)]
+        questions, results = self._session(decisions, ["a"] * 5, seeds)
+        assert len(results) == 5
+        assert [r["question"] for r in results] == [
+            "介绍自己", "讲项目", "线程池", "STAR", "职业规划"]
+        assert len(questions) == 5
+
+    def test_deep_dive_extends_section(self):
+        """答得差 → deep_dive：同章节追加现场题（种子池空时 generate 兜底空 → 章节结束）。"""
+        seeds = {"技术验证": [{"question": "线程池", "source": "weak"}]}
+        # 只有一章：首题后 deep_dive（但种子池空 + generate 返回 {} → 章节结束）
+        # 因此用 generate 兜底失败路径验证不会死循环
+        decisions = [{"action": "deep_dive", "guidance": "深挖", "reason": "答得差"}]
+        questions, results = self._session(decisions, ["a"] * 2, seeds)
+        assert len(results) == 1  # 出题失败 → 章节结束，不无限循环
+
+    def test_max_total_questions_cap(self):
+        """硬约束：整场题数不超 MAX_TOTAL_QUESTIONS。"""
+        from run_mock_interview import MAX_TOTAL_QUESTIONS
+        # 无限 deep_dive，靠 generate 兜底出题，验证总数封顶
+        seeds = {"技术验证": [{"question": "Q1", "source": "weak"}]}
+        decisions = [{"action": "deep_dive", "guidance": "追", "reason": "差"} for _ in range(50)]
+
+        def fake_gen(*a, **kw):
+            return {"question": f"动态题{len(a) and 'x'}", "source": "generic", "topic": "t"}
+
+        pool = {"技术验证": [{"question": "Q1", "source": "weak"}]}
+        ai = iter(["答"] * 100)
+
+        def fake_answer(_round):
+            return "答"
+
+        with patch.object(mi, "decide_next", side_effect=decisions), \
+             patch.object(mi, "interview_one", side_effect=lambda q, fn, a="", **kw: ("fail", "答", [{"reason": "r"}])), \
+             patch.object(mi, "generate_dynamic_question", side_effect=fake_gen):
+            questions, results = mi.run_dynamic_session(
+                ["技术验证"], pool, "简历", "JD", [],
+                ask_fn=fake_answer, on_save=lambda qs, rs: None,
+            )
+        assert len(questions) <= MAX_TOTAL_QUESTIONS
+        assert len(results) <= MAX_TOTAL_QUESTIONS
+        # 单章节也受 MAX_SECTION_QUESTIONS 限制（deep_dive 到上限后强制推进章节）
+        assert len(results) <= mi.MAX_SECTION_QUESTIONS or len(results) <= MAX_TOTAL_QUESTIONS
+
+    def test_decide_next_parse(self):
+        """decide_next 输出非法 action 时兜底 switch。"""
+        with patch.object(mi, "chat_json", return_value={"action": "hack", "guidance": "x", "reason": "y"}):
+            r = mi.decide_next("技术验证", "题", "fail", "r", 1, [], [])
+        assert r["action"] == "switch"

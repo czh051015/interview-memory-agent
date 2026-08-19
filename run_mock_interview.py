@@ -37,6 +37,9 @@ from src.memory import review_log
 WEAK_POOL_SIZE = 5   # 薄弱项候选池（供 LLM 从错题本挑技术验证题）
 MAX_FOLLOWUPS = 2    # 每题最多追 2 轮
 MAX_ROUNDS = MAX_FOLLOWUPS + 1  # 首答 + 2 次追问 = 3 轮
+MAX_TOTAL_QUESTIONS = 12   # 动态循环：整场总题数上限
+MAX_SECTION_QUESTIONS = 5  # 动态循环：单章节题数上限（项目深挖/技术验证）
+MIN_SECTION_QUESTIONS = 1  # 动态循环：单章节最少题数（保证章节骨架完整）
 
 # ── 数据文件（面试官出题依据，支持 .pdf / .md / .txt，优先 .pdf）──
 
@@ -136,6 +139,100 @@ def plan_interview(resume: str, jd: str, weak_items: list) -> list[dict]:
     except Exception as e:
         logging.warning("生成面试计划失败：%s", e)
         return []
+
+
+# ══════════ 工具 3b：动态智能体循环 —— 下一步决策 + 现场出题 ══════════
+# 面试官不是执行固定题单：每答完一题，根据当场表现决定 深挖 / 换题 / 进下一章 / 结束。
+# 系统只卡安全边界（章节顺序 / 章节题数上限 / 总题数上限），决策全在 LLM。
+_DECIDE_NEXT_PROMPT = (
+    "你是一位资深面试官，正在一场结构化面试进行中。刚答完一道题，现在决定下一步怎么走。\n"
+    "你会收到：当前章节、刚答完的题与表现、本章已问题数、剩余章节、本场已问题目。\n"
+    "只输出 JSON：\n"
+    '{"action": "deep_dive"|"switch"|"next_section"|"end", '
+    '"guidance": "继续时下一题的方向（一段话，具体、可深挖）", "reason": "一句决策依据"}\n'
+    "决策原则：\n"
+    "- 答得差（fail/partial 且理由显示不会）→ 优先 deep_dive：同主题换角度确认是真不会还是紧张；\n"
+    "- 答得好（pass）→ 一般 switch 换话题或 next_section，不浪费时间；\n"
+    "- 本章已问够（主题已充分考察）→ next_section；\n"
+    "- 只剩动机面/行为面且已问 → end。\n"
+    "- 保证每章至少 1 题；章节顺序和题数上限由系统卡，你只管合理决策。"
+)
+
+
+def decide_next(
+    section: str,
+    last_question: str,
+    performance: str,
+    reason: str,
+    section_asked: int,
+    remaining_sections: list[str],
+    asked_before: list[str],
+) -> dict:
+    """动态循环决策：LLM 输出 {action, guidance, reason}，兜底 switch。"""
+    user_prompt = (
+        f"当前章节：{section}\n"
+        f"刚答完的题：{last_question}\n"
+        f"本题表现：{performance}\n"
+        f"判断依据：{reason}\n"
+        f"本章已问题数：{section_asked}\n"
+        f"剩余章节：{remaining_sections or '（无，本章是最后一章）'}\n"
+        f"本场已问题目：{asked_before or '（无）'}"
+    )
+    try:
+        data = chat_json(_DECIDE_NEXT_PROMPT, user_prompt)
+        action = data.get("action", "switch")
+        if action not in ("deep_dive", "switch", "next_section", "end"):
+            action = "switch"
+        return {
+            "action": action,
+            "guidance": str(data.get("guidance", "")),
+            "reason": str(data.get("reason", "")),
+        }
+    except Exception as e:
+        logging.warning("下一步决策失败，兜底 switch：%s", e)
+        return {"action": "switch", "guidance": "", "reason": "决策失败"}
+
+
+_DYNAMIC_QUESTION_PROMPT = (
+    "你是资深面试官，在面试进行中现场出一道新题。你会收到：当前章节、出题指引（面试官决策）、"
+    "候选人简历、JD、历史薄弱项、本场已问题目。\n"
+    "任务：出一道符合章节和指引的题，具体、可深挖、贴合候选人材料，不要与已问题目重复。\n"
+    "只输出 JSON：\n"
+    '{"question": "面试题", "source": "resume"|"jd"|"weak"|"behavior"|"motivation"|"generic", "topic": "主题标签"}'
+)
+
+
+def generate_dynamic_question(
+    section: str,
+    guidance: str,
+    resume: str,
+    jd: str,
+    weak_items: list,
+    asked_before: list[str],
+) -> dict:
+    """现场出题：deep_dive/switch 时按决策指引生成新题。失败返回 {}（调用方跳过）。"""
+    weak_str = "\n".join(f"- [{it.id}] {it.question}" for it in weak_items) if weak_items else "（无）"
+    user_prompt = (
+        f"当前章节：{section}\n"
+        f"出题指引：{guidance or '（无，自行判断）'}\n"
+        f"候选人简历：{resume or '（未提供）'}\n"
+        f"岗位 JD：{jd or '（未提供）'}\n"
+        f"历史薄弱项：{weak_str}\n"
+        f"本场已问题目：{asked_before or '（无）'}"
+    )
+    try:
+        data = chat_json(_DYNAMIC_QUESTION_PROMPT, user_prompt, max_tokens=1024)
+        q = str(data.get("question", "")).strip()
+        if not q:
+            return {}
+        return {
+            "question": q,
+            "source": str(data.get("source", "generic")),
+            "topic": str(data.get("topic", "")),
+        }
+    except Exception as e:
+        logging.warning("现场出题失败：%s", e)
+        return {}
 
 
 # ══════════ 工具 4：检索答案对照 ══════════
@@ -604,6 +701,124 @@ def recover():
     print(f"补写完成（更新 {len(updated)} 题掌握度，新采集 {len(new)} 题进错题本）。")
 
 
+# ══════════ 动态智能体循环（可测试的纯状态机）══════════
+def run_dynamic_session(
+    section_order: list[str],
+    pool_by_section: dict[str, list[dict]],
+    resume: str,
+    jd: str,
+    weak_items: list,
+    *,
+    ask_fn,
+    on_save=None,
+    interrupted: bool = False,
+) -> tuple[list[dict], list[dict]]:
+    """动态面试状态机：选下一题 → 出题 → 等回答 → 追问 → 决策 → 循环。
+
+    硬约束（系统侧）：章节顺序不跳（sec_idx 只前进）、每章 ≥1 题、
+    单章 ≤MAX_SECTION_QUESTIONS、整场 ≤MAX_TOTAL_QUESTIONS。
+    决策全在 LLM（decide_next / generate_dynamic_question），系统只卡边界。
+
+    返回 (questions, results)。ask_fn 由调用方注入（CLI=stdin，测试=脚本答案）。
+    interrupted=True 时遇到 KeyboardInterrupt/EOFError 静默退出（已答保存）。
+    """
+    questions: list[dict] = []       # 实际问过的全部题（含现场生成的，供落盘/复盘）
+    results = []
+    asked_before: list[str] = []     # session 级上下文：本场已问题目
+    sec_idx = 0                      # 当前章节下标（只前进）
+    sec_asked: dict[str, int] = {}   # 每章已问题数
+    next_action: str | None = None   # 决策结果（deep_dive / switch / next_section）
+
+    while sec_idx < len(section_order):
+        if len(questions) >= MAX_TOTAL_QUESTIONS:
+            print("\n（达到整场题数上限，面试结束）")
+            break
+        section = section_order[sec_idx]
+        if sec_asked.get(section, 0) >= MAX_SECTION_QUESTIONS:
+            print(f"\n（{section} 已达章节上限，进入下一章）")
+            sec_idx += 1
+            continue
+        # 章节开始：打印章节头
+        if sec_asked.get(section, 0) == 0:
+            print(f"\n{'=' * 50}\n【{section}】\n{'=' * 50}")
+
+        # ── 选下一题 ──
+        if sec_asked.get(section, 0) == 0:
+            # 章节首题：优先用计划种子题，池空则现场出
+            q = pool_by_section[section].pop(0) if pool_by_section.get(section) else {}
+            if not q:
+                q = generate_dynamic_question(section, "", resume, jd, weak_items, asked_before)
+        elif next_action == "deep_dive":
+            # 答得差 → 同主题深挖：现场换角度出题
+            q = generate_dynamic_question(section, "深挖上一题主题", resume, jd, weak_items, asked_before)
+        else:
+            # switch / next_section / 兜底：优先种子池，池空现场出
+            q = pool_by_section[section].pop(0) if pool_by_section.get(section) else {}
+            if not q:
+                q = generate_dynamic_question(section, "", resume, jd, weak_items, asked_before)
+
+        if not q or not q.get("question"):
+            print(f"\n⚠️ 出题失败，{section} 章节结束。")
+            sec_idx += 1
+            continue
+        q["section"] = section
+        q.setdefault("source", "generic")
+        q.setdefault("topic", "")
+        q.setdefault("item", None)
+        questions.append(q)
+
+        print(f"\n[第 {len(questions)}/{MAX_TOTAL_QUESTIONS} 题 · {section}] {q['question']}")
+
+        try:
+            ref_answer = q["item"].answer if q["item"] else ""
+            performance, answer_text, transcript = interview_one(
+                q["question"], ask_fn, ref_answer, asked_before=asked_before
+            )
+        except (KeyboardInterrupt, EOFError):
+            if not interrupted:
+                raise
+            print("\n\n已退出模拟面试（已答的题会保存）。")
+            break
+
+        asked_before.append(q["question"])  # 答完记入面试官记忆
+        results.append({
+            "question": q["question"], "source": q.get("source", ""),
+            "topic": q.get("topic", ""), "item": q.get("item"),
+            "performance": performance, "answer": answer_text,
+            "transcript": transcript,
+        })
+        sec_asked[section] = sec_asked.get(section, 0) + 1
+        if on_save:
+            on_save(questions, results)  # 每答完一题就落盘，最多丢正在答的这一题
+
+        emoji = {"pass": "✅", "partial": "⚠️", "fail": "❌"}.get(performance, "❓")
+        print(f"\n{emoji} 本题表现：{performance.upper()}")
+
+        # ── 决策点：下一步怎么走（LLM 决策，系统卡边界）──
+        last_judge = (transcript or [{}])[-1]
+        remaining = section_order[sec_idx + 1:]
+        if sec_idx == len(section_order) - 1 and sec_asked.get(section, 0) >= MIN_SECTION_QUESTIONS:
+            decision = {"action": "end", "guidance": "", "reason": "最后一章已问，面试结束"}
+        else:
+            decision = decide_next(
+                section, q["question"], performance, last_judge.get("reason", ""),
+                sec_asked.get(section, 0), remaining, asked_before,
+            )
+        next_action = decision["action"]
+        if decision.get("reason"):
+            print(f"      → 面试官决策：{next_action}（{decision['reason'][:60]}）")
+
+        if next_action == "end" and sec_asked.get(section, 0) >= MIN_SECTION_QUESTIONS:
+            break
+        if next_action == "next_section" and sec_asked.get(section, 0) >= MIN_SECTION_QUESTIONS:
+            sec_idx += 1
+        elif next_action == "deep_dive" and sec_asked.get(section, 0) >= MAX_SECTION_QUESTIONS:
+            sec_idx += 1  # 章节已到上限，深挖转为进下一章（硬约束）
+        # switch：留在本章换话题（系统只在章节/整场上限处强制推进）
+
+    return questions, results
+
+
 # ══════════ 主流程 ══════════
 def main():
     print("=" * 60)
@@ -623,13 +838,19 @@ def main():
     print("\n正在根据 简历 / JD / 错题本 生成结构化面试...")
     sections = plan_interview(profile["resume"], profile["jd"], weak_items)
 
-    # 展开成题目列表，weak 题挂上对应 item 对象
+    # 展开成章节化题目池（动态循环的「种子题」：每章先用计划题，深挖/换题时现场出）
     weak_by_id = {it.id: it for it in weak_items}
-    questions = []
+    pool_by_section: dict[str, list[dict]] = {}
+    section_order: list[str] = []
     for sec in sections:
+        name = sec.get("name", "")
+        if not name or not sec.get("questions"):
+            continue
+        section_order.append(name)
+        qs = []
         for q in sec.get("questions", []):
             q = dict(q)
-            q["section"] = sec.get("name", "")
+            q["section"] = name
             # 防御 LLM 标错：weak 题必须「题目 == 错题原文」才绑定 item，否则降级为 generic
             if q.get("source") == "weak" and q.get("item_id"):
                 item = weak_by_id.get(q.get("item_id"))
@@ -640,48 +861,23 @@ def main():
                     q["source"] = "generic"
             else:
                 q["item"] = None
-            questions.append(q)
+            qs.append(q)
+        pool_by_section[name] = qs
 
-    if not questions:
+    if not section_order:
         print("⚠️ 出题失败（可能 LLM 没返回计划），请重试。")
         return
 
-    print(f"\n本轮共 {len(questions)} 题，按章节进行。每题最多追问 {MAX_FOLLOWUPS} 轮。")
-    _save_progress(questions, [], [])  # 面试开始：先落盘本场题目，防止中途崩溃全丢
+    print(f"\n动态面试：{len(section_order)} 个章节，按表现动态调整题量与深度。每题最多追问 {MAX_FOLLOWUPS} 轮。")
 
-    results = []
-    current_section = None
-    asked_before: list[str] = []  # session 级上下文：本场已问题目，注入后续追问判断
-    for idx, q in enumerate(questions, 1):
-        if q["section"] != current_section:
-            current_section = q["section"]
-            print(f"\n{'=' * 50}\n【{current_section}】\n{'=' * 50}")
-
-        print(f"\n[第 {idx}/{len(questions)} 题] {q['question']}")
-
-        def _ask(_round):
-            return input("\n你的回答：")
-
-        try:
-            ref_answer = q["item"].answer if q["item"] else ""
-            performance, answer_text, transcript = interview_one(
-                q["question"], _ask, ref_answer, asked_before=asked_before
-            )
-        except (KeyboardInterrupt, EOFError):
-            print("\n\n已退出模拟面试（已答的题会保存）。")
-            break
-
-        asked_before.append(q["question"])  # 答完记入面试官记忆
-        results.append({
-            "question": q["question"], "source": q.get("source", ""),
-            "topic": q.get("topic", ""), "item": q.get("item"),
-            "performance": performance, "answer": answer_text,
-            "transcript": transcript,
-        })
-        _save_progress(questions, results, [])  # 每答完一题就落盘，最多丢正在答的这一题
-
-        emoji = {"pass": "✅", "partial": "⚠️", "fail": "❌"}.get(performance, "❓")
-        print(f"\n{emoji} 本题表现：{performance.upper()}")
+    # ── 动态智能体循环：选下一题 → 出题 → 等回答 → 追问 → 决策 → 循环 ──
+    _save_progress([], [], [])  # 面试开始：先落盘（动态题会逐步追加）
+    questions, results = run_dynamic_session(
+        section_order, pool_by_section, profile["resume"], profile["jd"], weak_items,
+        ask_fn=lambda _round: input("\n你的回答："),
+        on_save=lambda qs, rs: _save_progress(qs, rs, []),
+        interrupted=True,
+    )
 
     if not results:
         print("没有已答的题，本次不保存。")
