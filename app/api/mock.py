@@ -50,6 +50,7 @@ class MockQuestion(BaseModel):
 
 class MockStartResponse(BaseModel):
     questions: list[MockQuestion]
+    focus_topics: list[str] = Field(default_factory=list)  # 画像薄弱主题（前端展示"本场重点"）
 
 
 class MockVerdictRequest(BaseModel):
@@ -122,9 +123,23 @@ def mock_start(req: MockStartRequest):
         )
 
     # 三源：简历 + JD（文件）+ 错题池 → 章节化计划
+    # 画像（人级记忆）：薄弱主题注入出题 + 前端展示"本场重点验证"
+    focus_topics: list[str] = []
+    user_profile = None
+    try:
+        from src.memory import profile as profile_mod
+        user_profile = profile_mod.build_profile(req.space, save=True)
+        focus_topics = user_profile.weak_topic_names()
+    except Exception as e:
+        logging.warning("画像读取失败，出题不依赖：%s", e)
+
     try:
         profile = _read_profile()
-        sections = plan_interview(profile["resume"], profile["jd"], weak_items)
+        sections = plan_interview(
+            profile["resume"], profile["jd"], weak_items,
+            focus_topics=focus_topics,
+            profile_text=user_profile.to_prompt_text() if user_profile else "",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成面试计划失败：{e}") from e
 
@@ -133,7 +148,7 @@ def mock_start(req: MockStartRequest):
         questions = []
         for it in weak_items:
             questions.append(_to_question(it, section="技术验证", source="weak"))
-        return MockStartResponse(questions=questions)
+        return MockStartResponse(questions=questions, focus_topics=focus_topics)
 
     by_id = {it.id: it for it in weak_items}
     questions = []
@@ -165,7 +180,7 @@ def mock_start(req: MockStartRequest):
 
     if not questions:
         raise HTTPException(status_code=422, detail="面试计划为空，请重试（可能是简历/JD 格式问题）")
-    return MockStartResponse(questions=questions)
+    return MockStartResponse(questions=questions, focus_topics=focus_topics)
 
 
 def _to_question(item, *, section: str, source: str) -> MockQuestion:

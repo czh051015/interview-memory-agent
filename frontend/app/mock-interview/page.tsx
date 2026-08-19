@@ -148,6 +148,7 @@ export default function MockInterviewPage() {
   const [rounds, setRounds] = useState<number[]>([]); // 每题已追轮数
   const [following, setFollowing] = useState(false);
   const [followMsg, setFollowMsg] = useState(""); // 面试官"不再追问"的提示
+  const [focusTopics, setFocusTopics] = useState<string[]>([]); // 画像薄弱主题（setup 页"本场重点"）
   const answerRef = useRef<HTMLTextAreaElement>(null);
 
   // ── 开始面试：拉错题 ──
@@ -158,6 +159,7 @@ export default function MockInterviewPage() {
       const space = localStorage.getItem("offerloop.space") || "default";
       const res = await startMockInterview(5, space);
       setQuestions(res.questions);
+      setFocusTopics(res.focus_topics ?? []);
       setPhase(res.questions.length ? "setup" : "setup");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "开始失败");
@@ -381,6 +383,23 @@ export default function MockInterviewPage() {
                   错题本（薄弱项优先）。共 {questions.length} 题，分章节进行，
                   每题一答一判，LLM 面试官给<b>参考要点 + 差距</b>，你最终拍板。
                 </p>
+
+                {/* 记忆管家：本场重点验证（来自用户画像）——"它记得你"的可见瞬间 */}
+                {focusTopics.length > 0 ? (
+                  <div className="mt-2.5 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2">
+                    <p className="text-[11px] text-violet-700 font-medium">
+                      🧠 记忆管家记得你：本场将重点验证你的薄弱主题 ——{" "}
+                      {focusTopics.map((t) => (
+                        <span
+                          key={t}
+                          className="inline-block text-[11px] bg-white border border-violet-200 text-violet-700 rounded-full px-2 py-0.5 mx-0.5"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </p>
+                  </div>
+                ) : null}
 
                 {/* 三源状态 + 简历/JD 上传 */}
                 <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50/60 p-3 space-y-3">
