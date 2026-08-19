@@ -1,4 +1,8 @@
-"""LLM 调用封装 —— 统一 DeepSeek API（兼容 OpenAI SDK）调用，温度=0 保复现。"""
+"""LLM 调用封装 —— 统一 OpenAI 兼容 API（默认 DeepSeek），温度=0 保复现。
+
+跨模型对照：judge/出题均走本模块；eval --cross-model 时传 model=CROSS_MODEL，
+若配置了 CROSS_MODEL_BASE_URL/CROSS_MODEL_API_KEY 则使用独立第二供应商（真独立先验）。
+"""
 
 import json
 import logging
@@ -6,11 +10,18 @@ from typing import Optional
 
 from openai import OpenAI
 
-from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from src.config import (
+    DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL,
+    DEEPSEEK_MODEL,
+    CROSS_MODEL_BASE_URL,
+    CROSS_MODEL_API_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
 _client: Optional[OpenAI] = None
+_cross_client: Optional[OpenAI] = None
 
 
 def _get_client() -> OpenAI:
@@ -20,6 +31,17 @@ def _get_client() -> OpenAI:
     return _client
 
 
+def _get_cross_client() -> OpenAI:
+    """第二判官的 client：配置了独立 base_url/key 就用独立供应商，否则复用 DeepSeek。"""
+    global _cross_client
+    if _cross_client is None:
+        if CROSS_MODEL_BASE_URL and CROSS_MODEL_API_KEY:
+            _cross_client = OpenAI(api_key=CROSS_MODEL_API_KEY, base_url=CROSS_MODEL_BASE_URL)
+        else:
+            _cross_client = _get_client()
+    return _cross_client
+
+
 def chat(
     system_prompt: str,
     user_prompt: str,
@@ -27,9 +49,10 @@ def chat(
     model: str = DEEPSEEK_MODEL,
     temperature: float = 0.0,
     max_tokens: int = 1024,
+    cross: bool = False,
 ) -> str:
-    """单轮 LLM 调用，返回文本响应。"""
-    client = _get_client()
+    """单轮 LLM 调用，返回文本响应。cross=True 走第二判官（跨模型对照）。"""
+    client = _get_cross_client() if cross else _get_client()
     response = client.chat.completions.create(
         model=model,
         temperature=temperature,
@@ -59,8 +82,9 @@ def chat_json(
     temperature: float = 0.0,
     max_tokens: int = 1024,
     retries: int = 2,
+    cross: bool = False,
 ) -> dict:
-    """单轮 LLM 调用，解析并返回 JSON。失败时重试。"""
+    """单轮 LLM 调用，解析并返回 JSON。失败时重试。cross=True 走第二判官。"""
     last_error = None
     for attempt in range(retries):
         try:
@@ -70,6 +94,7 @@ def chat_json(
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                cross=cross,
             )
             # 尝试提取 JSON（处理 markdown code block 包裹的情况）
             text = text.strip()

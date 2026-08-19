@@ -19,6 +19,7 @@
 用法：
   python eval/mock_interview_eval.py            # 只跑量规版（44 次 LLM 调用）
   python eval/mock_interview_eval.py --compare  # 量规版 vs 旧版（88 次）
+  python eval/mock_interview_eval.py --cross-model  # 追加第二判官跑同一套样本（独立先验验证）
 输出：eval/mock_interview_eval_results.json（可串 CI，风格对齐 retrieval_eval/llm_judge_eval）
 """
 import json
@@ -32,6 +33,7 @@ except (AttributeError, ValueError, OSError):
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from run_mock_interview import judge_single_round
+from src.config import CROSS_MODEL
 
 EVAL_DIR = Path(__file__).resolve().parent
 SAMPLES = EVAL_DIR / "samples"
@@ -50,12 +52,13 @@ def _judge_ok(judge: dict) -> bool:
     return judge.get("suggested") in _ORD
 
 
-def run_judge(question: str, answer: str, *, expected_points, use_rubric: bool) -> str:
-    """跑一次阅卷，返回三态；失败兜底 partial（与产品行为一致）。"""
+def run_judge(question: str, answer: str, *, expected_points, use_rubric: bool, cross: bool = False) -> str:
+    """跑一次阅卷，返回三态；失败兜底 partial（与产品行为一致）。cross=True 走第二判官。"""
     judge = judge_single_round(
         question, answer,
         expected_points=expected_points if use_rubric else None,
         use_rubric=use_rubric,
+        cross=cross,
     )
     return judge.get("suggested", "partial") if _judge_ok(judge) else "partial"
 
@@ -71,14 +74,14 @@ def check_calibration(items: list[dict]) -> list[str]:
     return pending
 
 
-def evaluate(items: list[dict], *, use_rubric: bool) -> dict:
-    """对全部样本跑一遍阅卷，返回逐题判定 + 汇总指标。"""
+def evaluate(items: list[dict], *, use_rubric: bool, cross: bool = False, label: str | None = None) -> dict:
+    """对全部样本跑一遍阅卷，返回逐题判定 + 汇总指标。cross=True 走第二判官。"""
     per_question = []
     for it in items:
         q = it["question"]
         exp = it.get("expected_points") or []
         judged = {
-            kind: run_judge(q, it["answers"][kind], expected_points=exp, use_rubric=use_rubric)
+            kind: run_judge(q, it["answers"][kind], expected_points=exp, use_rubric=use_rubric, cross=cross)
             for kind in ("good", "mediocre", "bad", "confident")
         }
         g, m, b, c = (_ORD[judged[k]] for k in ("good", "mediocre", "bad", "confident"))
@@ -100,7 +103,9 @@ def evaluate(items: list[dict], *, use_rubric: bool) -> dict:
         return round(sum(1 for p in per_question if p["checks"][key]) / n, 4) if n else 0.0
 
     return {
-        "judge_mode": "rubric" if use_rubric else "legacy",
+        "judge_mode": label or ("rubric" if use_rubric else "legacy"),
+        "model": CROSS_MODEL if cross else "deepseek-chat",
+        "cross": cross,
         "samples": n,
         "metrics": {
             "discrimination_rate": rate("good_gt_bad"),
@@ -131,30 +136,36 @@ def main() -> int:
         return 1
 
     compare = "--compare" in sys.argv
+    cross = "--cross-model" in sys.argv
     runs = [evaluate(items, use_rubric=True)]
     if compare:
-        runs.append(evaluate(items, use_rubric=False))
+        runs.append(evaluate(items, use_rubric=False, label="legacy"))
+    if cross:
+        # 第二判官：同一套样本、同一量规，独立模型（默认 deepseek-reasoner，可配独立供应商）
+        runs.append(evaluate(items, use_rubric=True, cross=True, label="rubric_cross"))
 
     result = {
         "meta": {
             "generated": "2026-08-19",
             "samples": len(items),
             "thresholds": THRESHOLDS,
-            "note": "量规版注入 L2 参考答案；旧版不注入（模拟现状自生成要点）。no_fool=confident 未判 pass。",
+            "cross_model": CROSS_MODEL,
+            "note": "量规版注入 L2 参考答案；旧版不注入（模拟现状自生成要点）。no_fool=confident 未判 pass。"
+                    "rubric_cross=第二判官（默认 deepseek-reasoner，配置 CROSS_MODEL_* 可换独立供应商）验证非单模型自洽。",
         },
         "runs": runs,
     }
     OUT.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("=" * 56)
+    print("=" * 68)
     for r in runs:
         m = r["metrics"]
         status = "PASS" if (m["discrimination_rate"] >= THRESHOLDS["discrimination"]
                             and m["no_fool_rate"] >= THRESHOLDS["no_fool"]) else "FAIL"
-        print(f"[{r['judge_mode']:>6}] discrimination={m['discrimination_rate']:.0%} "
-              f"order_ok={m['order_ok_rate']:.0%} strict={m['strict_order_rate']:.0%} "
-              f"no_fool={m['no_fool_rate']:.0%} question_pass={m['question_pass_rate']:.0%} → {status}")
-    print("=" * 56)
+        print(f"[{r['judge_mode']:>12}] model={r.get('model',''):<16} "
+              f"disc={m['discrimination_rate']:.0%} strict={m['strict_order_rate']:.0%} "
+              f"no_fool={m['no_fool_rate']:.0%} qpass={m['question_pass_rate']:.0%} → {status}")
+    print("=" * 68)
     print(f"结果已落盘 → {OUT}")
     return 0
 

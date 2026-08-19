@@ -30,6 +30,13 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
+# ── 跨模型对照（L3 eval --cross-model 的第二判官）──
+# 默认 deepseek-reasoner：同 key 零成本、不同推理路径（CoT），打破「同模型自洽」
+# 可换任意第二家 OpenAI 兼容 API：CROSS_MODEL_BASE_URL/CROSS_MODEL_API_KEY 覆盖后即用独立供应商
+CROSS_MODEL = os.getenv("CROSS_MODEL", "deepseek-reasoner")
+CROSS_MODEL_BASE_URL = os.getenv("CROSS_MODEL_BASE_URL", "")  # 空 = 复用 DeepSeek endpoint
+CROSS_MODEL_API_KEY = os.getenv("CROSS_MODEL_API_KEY", "")    # 空 = 复用 DeepSeek key
+
 # ── Ollama (本地嵌入) ──
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "shaw/dmeta-embedding-zh:latest")

@@ -183,10 +183,20 @@ _RUBRIC_FOLLOWUP_PROMPT = (
 )
 
 
-def judge_followup(question: str, points: list[str], answer: str, round_num: int, *, use_rubric: bool = True) -> dict:
+def judge_followup(
+    question: str,
+    points: list[str],
+    answer: str,
+    round_num: int,
+    *,
+    use_rubric: bool = True,
+    cross_on_partial: bool = False,
+) -> dict:
     """追问判断：LLM 输出结构化判断，兜底为 partial。
 
     use_rubric=True 时用量规版（四维约束 + 引原文证据），输出格式不变。
+    cross_on_partial=True 时：主判官判 partial（拿不准）→ 第二判官复核，
+    复核给出明确判定（pass/fail）则采纳并标注；复核仍 partial 则保留。
     """
     prompt = _RUBRIC_FOLLOWUP_PROMPT if use_rubric else _FOLLOWUP_PROMPT
     user_prompt = (
@@ -195,10 +205,21 @@ def judge_followup(question: str, points: list[str], answer: str, round_num: int
         f"候选人回答（第{round_num}轮）：{answer}"
     )
     try:
-        return chat_json(prompt, user_prompt)
+        result = chat_json(prompt, user_prompt)
     except Exception as e:
         logging.warning("追问判断失败，兜底 partial：%s", e)
         return {"need_followup": False, "followup_question": "", "reason": "判断失败", "performance": "partial"}
+
+    if cross_on_partial and result.get("performance") == "partial":
+        try:
+            review = chat_json(prompt, user_prompt, cross=True)
+            if review.get("performance") in ("pass", "fail"):
+                result = review
+                result["reason"] = f"【第二判官复核】{result.get('reason', '')}"
+                result["cross_reviewed"] = True
+        except Exception as e:
+            logging.warning("第二判官复核失败，保留主判官 partial：%s", e)
+    return result
 
 
 # ══════════ 单轮判定（Web v1：无追问，LLM 出要点+差距+建议判定）══════════
@@ -237,20 +258,30 @@ def judge_single_round(
     *,
     expected_points: list[str] | None = None,
     use_rubric: bool = True,
+    cross: bool = False,
+    cross_on_partial: bool = False,
 ) -> dict:
     """单轮判定（Web 版）：LLM 生成期望要点 + 差距 + 建议判定。失败兜底 partial。
 
     expected_points：L2 独立金标准——传入参考答案要点时阅卷人对照金标准（不再自己现编）；
                     不传则维持现状（LLM 自行生成要点，产品路径默认）。
     use_rubric=True 时用量规版（L1 量规解耦：四维约束 + 引原文证据）。
+    cross=True 时直接走第二判官模型（eval --cross-model 用，不再主判）。
+    cross_on_partial=True 时：主判官判 partial（拿不准）→ 第二判官复核，
+    复核给出明确判定（pass/fail）则采纳并标注；复核仍 partial 则保留。
     输出：{points: [...], misses: [...], suggested: pass|partial|fail, reason: str}
     """
     points_section = ""
     if expected_points:
         points_section = "参考答案要点：\n" + "\n".join(f"- {p}" for p in expected_points) + "\n"
     user_prompt = f"面试题：{question}\n{points_section}候选人回答：{answer}"
-    try:
-        data = chat_json(_RUBRIC_SINGLE_PROMPT if use_rubric else _SINGLE_JUDGE_PROMPT, user_prompt)
+
+    def _judge(cross_call: bool) -> dict:
+        data = chat_json(
+            _RUBRIC_SINGLE_PROMPT if use_rubric else _SINGLE_JUDGE_PROMPT,
+            user_prompt,
+            cross=cross_call,
+        )
         if not isinstance(data.get("points"), list) or not isinstance(data.get("misses"), list):
             raise ValueError("points/misses 必须为数组")
         suggested = data.get("suggested", "partial")
@@ -262,6 +293,19 @@ def judge_single_round(
             "suggested": suggested,
             "reason": str(data.get("reason", "")),
         }
+
+    try:
+        result = _judge(cross)
+        if cross_on_partial and not cross and result["suggested"] == "partial":
+            try:
+                review = _judge(cross_call=True)
+                if review["suggested"] in ("pass", "fail"):
+                    result = review
+                    result["reason"] = f"【第二判官复核】{result['reason']}"
+                    result["cross_reviewed"] = True
+            except Exception as e:
+                logging.warning("第二判官复核失败，保留主判官 partial：%s", e)
+        return result
     except Exception as e:
         logging.warning("单轮判定失败，兜底 partial：%s", e)
         return {"points": [], "misses": [], "suggested": "partial", "reason": "LLM 判定失败"}
@@ -443,7 +487,7 @@ def interview_one(question: str, answer_fn, answer: str = "") -> tuple[str, str,
             break
         answers.append(answer)
 
-        judge = judge_followup(question, points, answer, round_num)
+        judge = judge_followup(question, points, answer, round_num, cross_on_partial=True)
         performance = judge.get("performance", "partial")
         transcript.append({
             "round": round_num,
