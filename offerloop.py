@@ -13,7 +13,9 @@ import sys
 import re
 import json
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -28,6 +30,35 @@ from src.cleaner.schema import ItemStatus, KnowledgeItem, utcnow
 from src.memory import knowledge_store as store
 from src.memory.mastery import rank, effective_mastery, _elapsed_days
 import run_mock_interview as mock
+
+# ── AgentOps 埋点（可选接入：设置 AGENTOPS_INGEST_URL 且 agentops 可导入时启用）──
+# 初始化放 main() 内（__main__ 保护）：避免 instrument 扫描「offerloop」模块时
+# 重新执行模块级代码导致重复初始化（__main__ vs offerloop 双模块问题）。
+_ao = None  # 接入成功 = (tracer, instrumentation)
+
+try:
+    from sdk.instrument import session_snapshot_hash  # 无 agentops 环境也可导入
+except ImportError:  # pragma: no cover
+    session_snapshot_hash = None
+
+
+def _init_ao() -> None:
+    """可选接入 AgentOps 埋点（幂等；失败仅告警，不阻塞主流程）。"""
+    global _ao
+    if _ao is not None or not os.getenv("AGENTOPS_INGEST_URL") or session_snapshot_hash is None:
+        return
+    try:
+        from sdk import init_offerloop
+
+        _ao = init_offerloop(
+            ingest_url=os.getenv("AGENTOPS_INGEST_URL"),
+            offerloop_root=str(Path(__file__).parent),
+            agent="offerloop",
+        )
+        if _ao:
+            logging.info("AgentOps 埋点已启用（ingest=%s）", os.getenv("AGENTOPS_INGEST_URL"))
+    except Exception as _e:
+        logging.warning("AgentOps 埋点未启用：%s", _e)
 
 # ── 意图路由 ──
 _ROUTER_PROMPT = (
@@ -459,7 +490,7 @@ def do_maintenance() -> None:
     print("=" * 40)
     print("维护 Agent · 数据体检")
     print("=" * 40)
-    stats = store.get_stats()
+    stats = store.get_stats(space=_cfg.SPACE)
     print(
         f"总数 {stats['total']} 道："
         f"❌ 错题 {stats['by_status']['fail']} · "
@@ -493,7 +524,44 @@ _HELP = (
 )
 
 
+def _dispatch(text: str) -> bool:
+    """处理一条用户输入，返回是否继续循环（False = 退出）。
+
+    从 main() 循环体抽出：既保持主流程不变，又为 AgentOps 埋点提供
+    「一次任务 = 一个 trace」的边界（M1 接入）。
+    """
+    # 规则 fast-path 只拦「退出」，其余走 LLM 语义理解（含作用域/编号提取 + 上下文消歧）
+    intent, filter_, mark = _fast_route(text)
+    if intent is None:
+        intent, filter_, mark = route(text, _last_context)
+    if intent == "quit":
+        print("再见。")
+        return False
+    elif intent == "record_review":
+        do_record_review(text)
+    elif intent == "batch_record":
+        do_batch_record()
+    elif intent == "mock_interview":
+        do_mock_interview()
+    elif intent == "list_items":
+        do_list_items(filter_)
+    elif intent == "review_remind":
+        do_review_remind()
+    elif intent == "show_review":
+        do_show_review()
+    elif intent == "mark_fail":
+        do_mark(text, mark, ItemStatus.FAIL)
+    elif intent == "mark_pass":
+        do_mark(text, mark, ItemStatus.PASS)
+    elif intent == "maintenance":
+        do_maintenance()
+    else:
+        print("没太听懂。你可以：记一道错题 / 模拟面试 / 看错题 / 看提醒 / 退出。")
+    return True
+
+
 def main() -> None:
+    _init_ao()  # AgentOps 可选接入（幂等）
     print("=" * 50)
     print("OfferLoop —— 记得你的面试错题本")
     print("=" * 50)
@@ -525,33 +593,22 @@ def main() -> None:
         if not text:
             continue
 
-        # 规则 fast-path 只拦「退出」，其余走 LLM 语义理解（含作用域/编号提取 + 上下文消歧）
-        intent, filter_, mark = _fast_route(text)
-        if intent is None:
-            intent, filter_, mark = route(text, _last_context)
-        if intent == "quit":
-            print("再见。")
-            break
-        elif intent == "record_review":
-            do_record_review(text)
-        elif intent == "batch_record":
-            do_batch_record()
-        elif intent == "mock_interview":
-            do_mock_interview()
-        elif intent == "list_items":
-            do_list_items(filter_)
-        elif intent == "review_remind":
-            do_review_remind()
-        elif intent == "show_review":
-            do_show_review()
-        elif intent == "mark_fail":
-            do_mark(text, mark, ItemStatus.FAIL)
-        elif intent == "mark_pass":
-            do_mark(text, mark, ItemStatus.PASS)
-        elif intent == "maintenance":
-            do_maintenance()
+        # AgentOps：一次任务 = 一个 trace（根 span 记录任务前记忆快照 hash，供 M4 重放恢复）
+        if _ao is not None:
+            tracer, _ = _ao
+            with tracer.trace("offerloop.task", memory_snapshot=session_snapshot_hash(space_dir())):
+                if not _dispatch(text):
+                    break
         else:
-            print("没太听懂。你可以：记一道错题 / 模拟面试 / 看错题 / 看提醒 / 退出。")
+            if not _dispatch(text):
+                break
+
+    # AgentOps：退出前排空 exporter 缓冲（异步上报不丢根 span）
+    if _ao is not None:
+        try:
+            _ao[0].flush(timeout=3)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ import sys
 from src.cleaner.schema import ItemStatus, ItemCategory
 from src.cleaner.annotate import annotate_unknown
 from src.memory import knowledge_store as store
+import src.config as _cfg  # noqa: E402
 
 # 真实终端/stdout 才包装；pytest 环境直接放行（包装会 GC 关闭原 stdout 缓冲，破坏 pytest 捕获）
 if hasattr(sys.stdout, "buffer") and "pytest" not in sys.modules:
@@ -38,8 +39,15 @@ def main(argv: list[str] | None = None) -> int:
         print(__doc__)
         return 0
 
+    # --space 参数（在 store 操作前设置当前空间）
+    if "--space" in args:
+        _i = args.index("--space")
+        if _i + 1 < len(args):
+            _cfg.SPACE = args[_i + 1]
+        del args[_i:_i + 2]
+
     # 1. 检索面经里的 unknown 题，只标知识点（category=knowledge），过滤 info 类行为题
-    items = store.search(source="public_jingyan", status="unknown", top_k=1000)
+    items = store.search(source="public_jingyan", status="unknown", space=_cfg.SPACE, top_k=1000)
     items = [item for item in items if item.category == ItemCategory.KNOWLEDGE]
     if not items:
         print("没有待标注的知识点面经题（source=public_jingyan + status=unknown + category=knowledge）")
@@ -54,6 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     # 3. 只写回状态变化的条目（标了 fail/partial 的），避免重新嵌入全部面经题
     changed = [item for item in updated if item.status != ItemStatus.UNKNOWN]
     if changed:
+        for item in changed:
+            if item.space != _cfg.SPACE:
+                item.space = _cfg.SPACE
         store.store_items(changed)
 
     # 统计

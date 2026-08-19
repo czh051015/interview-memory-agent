@@ -23,6 +23,14 @@ from pathlib import Path
 from src.market import jingyan as jingyan_mod
 from src.market import jingyan_preprocess as preprocess_mod
 from src.memory import knowledge_store as store
+import src.config as _cfg  # noqa: E402
+
+# --space 参数（在 store 操作前设置当前空间）
+if "--space" in sys.argv:
+    _i = sys.argv.index("--space")
+    if _i + 1 < len(sys.argv):
+        _cfg.SPACE = sys.argv[_i + 1]
+    del sys.argv[_i:_i + 2]
 
 # 真实终端/stdout 才包装；pytest 环境直接放行（包装会 GC 关闭原 stdout 缓冲，破坏 pytest 捕获）
 if hasattr(sys.stdout, "buffer") and "pytest" not in sys.modules:
@@ -72,6 +80,10 @@ def _import_and_store(records, *, dedup: bool) -> list:
     text = "\n".join(q for q, _ in pairs)
     item_meta = {i: meta for i, (_, meta) in enumerate(pairs)}
     items = jingyan_mod.import_jingyan(text, item_meta=item_meta)
+    # 写入当前空间（--space 指定，默认 default）
+    for it in items:
+        if it.space != _cfg.SPACE:
+            it.space = _cfg.SPACE
     store.store_items(items)
     return items
 

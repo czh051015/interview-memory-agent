@@ -188,7 +188,7 @@ def collect(include_demo: bool = False) -> dict:
         })
     rows.sort(key=lambda r: -r["gap"])
 
-    stats = store.get_stats()
+    stats = store.get_stats(space=_cfg.SPACE)
     counts = {"red": 0, "yellow": 0, "green": 0}
     for r in rows:
         counts[r["tier"]] += 1

@@ -2,6 +2,7 @@
 用法：
   python run_interview.py              # 读取 data/seed/interview.txt，追加到错题本
   python run_interview.py --fresh       # 先清空旧数据再拆解
+  python run_interview.py --space 试玩   # 写入指定空间（默认 default）
   python run_interview.py 你的面经...   # 命令行直接贴复盘
 """
 import sys, io, logging
@@ -12,6 +13,14 @@ from pathlib import Path
 from src.cleaner.decompose import decompose
 from src.cleaner.schema import ItemStatus
 from src.memory import knowledge_store as store
+import src.config as _cfg  # noqa: E402
+
+# --space 参数（在导入前设置，保证 store 读当前空间）
+if "--space" in sys.argv:
+    _i = sys.argv.index("--space")
+    if _i + 1 < len(sys.argv):
+        _cfg.SPACE = sys.argv[_i + 1]
+    del sys.argv[_i:_i + 2]
 
 args = [a for a in sys.argv[1:] if a != "--fresh"]
 fresh_mode = "--fresh" in sys.argv
@@ -38,6 +47,11 @@ print("正在拆解...")
 print("=" * 60)
 
 result = decompose(text)
+
+# ── 写入当前空间：拆解出的题统一打上 space 标签（否则会落 default）──
+for it in result.items:
+    if it.space != _cfg.SPACE:
+        it.space = _cfg.SPACE
 
 # ── ISSUES E1: unknown 条目交互补标（仅交互终端，管道场景跳过防卡死）──
 items = result.items
@@ -81,12 +95,12 @@ for item in items:
 
 # ── 入库 ──
 print("=" * 60)
-before_count = store.get_stats()["total"]
+before_count = store.get_stats(space=_cfg.SPACE)["total"]
 count = store.store_items(items)
 print(f"本次入库: {count} 条")
 
 # ── 统计 ──
-stats = store.get_stats()
+stats = store.get_stats(space=_cfg.SPACE)
 print()
 print("=" * 60)
 print("📊 本次拆解:")

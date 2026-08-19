@@ -436,7 +436,7 @@ def _collect_new_item(r: dict) -> KnowledgeItem:
     """面试中答差的新题（简历/JD/行为/动机来源），自动采集进错题本，来源可追溯。
 
     answer 用 r["feedback"] 作首个参考答案（模拟面试判定文本），没有则为空；
-    space 跟随当前空间（r["space"]，缺省 default——Web 版必须传，否则漏进默认空间）。
+    space 跟随当前空间（r["space"] 优先，缺省 CLI 当前 _cfg.SPACE——Web 版显式传）。
     """
     status = ItemStatus.FAIL if r["performance"] == "fail" else ItemStatus.PARTIAL
     ki = KnowledgeItem(
@@ -448,7 +448,7 @@ def _collect_new_item(r: dict) -> KnowledgeItem:
         source=ItemSource.MOCK_INTERVIEW,
         mastery_score=mastery.INITIAL_MASTERY[status],
         created_at=utcnow(),
-        space=r.get("space", "default"),
+        space=r.get("space") or _cfg.SPACE,
     )
     return record_birth(ki, reason=f"模拟面试表现 {r['performance']}", actor="mock_interview")
 
