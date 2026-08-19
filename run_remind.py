@@ -19,6 +19,7 @@ import sys
 import io
 import base64
 import subprocess
+import logging
 from datetime import datetime
 from xml.sax.saxutils import escape as _xml_escape
 
@@ -88,7 +89,30 @@ def _notify_mode() -> int:
     """静默检查：只有「快忘了」(gap≥0.5) 的题才弹通知，否则静默退出。
 
     供每天定时任务调用——不打扰，只在真有遗忘时提醒。
+    v2：走记忆管家 Agent（LLM 生成复习建议 + 薄弱主题），LLM 失败自动回退规则版。
     """
+    from src.memory import memory_keeper as keeper
+
+    try:
+        return _notify_mode_keeper(keeper)
+    except Exception as e:
+        logging.error("记忆管家模式异常，回退规则版：%s", e)
+        return _notify_mode_rule()
+
+
+def _notify_mode_keeper(keeper) -> int:
+    """记忆管家版：读快照 → LLM 规划 → 有快忘的才弹。"""
+    plan = keeper.run(_cfg.SPACE, notify=True)
+    red_count = len(keeper.read_memory_state(_cfg.SPACE).red)
+    if red_count == 0:
+        return 0  # 没有快忘的题，静默
+    if plan.get("plan"):
+        print(f"[{datetime.now():%Y-%m-%d %H:%M}] 记忆管家已提醒 {len(plan['plan'])} 道题")
+    return 0
+
+
+def _notify_mode_rule() -> int:
+    """规则版（原实现）：gap≥0.5 的题弹通知，不依赖 LLM。"""
     now = utcnow()
     items = _load_review_items()
     if not items:

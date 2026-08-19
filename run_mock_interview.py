@@ -120,20 +120,25 @@ _PLAN_PROMPT = (
     "3. 技术验证：3 题，混合「JD 能力项」和「历史薄弱项」。薄弱项优先用给定错题（item_id 填对应 id，source=weak，question 直接抄错题原文）；JD 能力项现场出题（source=jd，item_id=null）。\n"
     "4. 行为面：1 题，用 STAR（情境-任务-行动-结果）考察软素质。\n"
     "5. 动机面：1 题，为什么投这个岗 / 职业规划。\n\n"
-    "source 取值：generic / resume / jd / weak / behavior / motivation。\n"
+    "记忆管家薄弱主题（如提供）：技术验证章出题时应优先覆盖这些主题。\n\n"    "source 取值：generic / resume / jd / weak / behavior / motivation。\n"
     "item_id 规则（严格）：只有「技术验证」章里、且题目是直接抄错题原文的题，才允许 source=weak 并填对应 item_id；其余所有题（自我介绍/项目深挖/行为面/动机面）source 一律不能是 weak，item_id 一律 null。\n"
     "topic：每题一个简短主题标签（如 RAG、线程池、项目深挖、职业规划），用于归档。\n"
     "题目要求：具体、可深挖、贴合候选人材料，不要泛泛的背诵题。"
 )
 
 
-def plan_interview(resume: str, jd: str, weak_items: list) -> list[dict]:
-    """LLM 生成章节化面试计划。失败返回 []（主流程提示重试）。"""
+def plan_interview(resume: str, jd: str, weak_items: list, focus_topics: list[str] | None = None) -> list[dict]:
+    """LLM 生成章节化面试计划。失败返回 []（主流程提示重试）。
+
+    focus_topics：记忆管家提炼的薄弱主题（可选），注入技术验证章出题优先覆盖。
+    """
     weak_str = "\n".join(f"- [{it.id}] {it.question}" for it in weak_items) if weak_items else "（无）"
+    topics_str = "、".join(focus_topics) if focus_topics else "（无）"
     user_prompt = (
         f"## 候选人简历\n{resume or '（未提供）'}\n\n"
         f"## 岗位 JD\n{jd or '（未提供）'}\n\n"
-        f"## 历史薄弱项\n{weak_str}"
+        f"## 历史薄弱项\n{weak_str}\n\n"
+        f"## 记忆管家薄弱主题\n{topics_str}"
     )
     try:
         data = chat_json(_PLAN_PROMPT, user_prompt, max_tokens=4096)
@@ -837,8 +842,19 @@ def main():
         print("   · 错题本：先记几道错题（说「今天面了 X 被问 Y 没答上」）")
         return
 
+    # 记忆管家：先读记忆状态 → 提炼薄弱主题 → 注入出题（出题靠记忆的闭环）
+    focus_topics: list[str] = []
+    try:
+        from src.memory import memory_keeper as keeper
+        keeper_plan = keeper.run(_cfg.SPACE, notify=False)
+        focus_topics = keeper_plan.get("focus_topics") or []
+        if focus_topics:
+            print(f"🧠 记忆管家薄弱主题：{'、'.join(focus_topics)} → 技术验证章优先覆盖")
+    except Exception as e:
+        logging.warning("记忆管家薄弱主题读取失败，继续出题：%s", e)
+
     print("\n正在根据 简历 / JD / 错题本 生成结构化面试...")
-    sections = plan_interview(profile["resume"], profile["jd"], weak_items)
+    sections = plan_interview(profile["resume"], profile["jd"], weak_items, focus_topics=focus_topics)
 
     # 展开成章节化题目池（动态循环的「种子题」：每章先用计划题，深挖/换题时现场出）
     weak_by_id = {it.id: it for it in weak_items}
