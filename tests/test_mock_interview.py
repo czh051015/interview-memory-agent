@@ -172,3 +172,41 @@ class TestReviewReport:
         report = mi.generate_review_report([], [])
         assert report is None
 
+
+class TestSessionContext:
+    """session 级上下文（短期记忆最小版）：已问题目注入追问判断。"""
+
+    @patch.object(mi, "chat_json")
+    def test_asked_before_injected_into_prompt(self, mock_chat_json):
+        """已问题目列表应出现在 judge_followup 的 user prompt 里。"""
+        mock_chat_json.return_value = {
+            "need_followup": False, "followup_question": "", "reason": "ok", "performance": "pass",
+        }
+        mi.judge_followup("新题", ["点1"], "答", 1, asked_before=["旧题A", "旧题B"])
+        user_prompt = mock_chat_json.call_args[0][1]
+        assert "旧题A" in user_prompt
+        assert "旧题B" in user_prompt
+        assert "本场已问过的题目" in user_prompt
+
+    @patch.object(mi, "chat_json")
+    def test_no_asked_before_clean_prompt(self, mock_chat_json):
+        """无历史时不注入上下文段。"""
+        mock_chat_json.return_value = {
+            "need_followup": False, "followup_question": "", "reason": "ok", "performance": "pass",
+        }
+        mi.judge_followup("题", ["点1"], "答", 1)
+        user_prompt = mock_chat_json.call_args[0][1]
+        assert "本场已问过的题目" not in user_prompt
+
+    @patch.object(mi, "get_expected_points", return_value=["点1"])
+    @patch.object(mi, "judge_followup")
+    def test_interview_one_passes_history(self, mock_judge, mock_points):
+        """interview_one 应把 asked_before 透传给 judge_followup。"""
+        mock_judge.return_value = {
+            "need_followup": False, "followup_question": "", "reason": "ok", "performance": "pass",
+        }
+        answers = iter(["答"])
+        mi.interview_one("题", lambda r: next(answers), asked_before=["历史题"])
+        assert mock_judge.call_args[1]["asked_before"] == ["历史题"]
+
+

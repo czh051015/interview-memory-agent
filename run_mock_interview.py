@@ -191,18 +191,27 @@ def judge_followup(
     *,
     use_rubric: bool = True,
     cross_on_partial: bool = False,
+    asked_before: list[str] | None = None,
 ) -> dict:
     """追问判断：LLM 输出结构化判断，兜底为 partial。
 
     use_rubric=True 时用量规版（四维约束 + 引原文证据），输出格式不变。
     cross_on_partial=True 时：主判官判 partial（拿不准）→ 第二判官复核，
     复核给出明确判定（pass/fail）则采纳并标注；复核仍 partial 则保留。
+    asked_before：本场已问题目列表（session 级上下文，短期记忆最小版）——
+    让面试官记得前面问过什么，追问时可参考、不重复提问。
     """
     prompt = _RUBRIC_FOLLOWUP_PROMPT if use_rubric else _FOLLOWUP_PROMPT
+    ctx = ""
+    if asked_before:
+        ctx = "\n本场已问过的题目（面试官记忆，追问可参考、请勿重复提问）：\n" + "\n".join(
+            f"- {q[:80]}" for q in asked_before
+        ) + "\n"
     user_prompt = (
         f"面试题：{question}\n"
         f"期望要点：{points}\n"
         f"候选人回答（第{round_num}轮）：{answer}"
+        f"{ctx}"
     )
     try:
         result = chat_json(prompt, user_prompt)
@@ -469,10 +478,11 @@ def _format_review(report: dict) -> str:
 
 
 # ══════════ 单题面试（可测试的纯逻辑）══════════
-def interview_one(question: str, answer_fn, answer: str = "") -> tuple[str, str, list]:
+def interview_one(question: str, answer_fn, answer: str = "", asked_before: list[str] | None = None) -> tuple[str, str, list]:
     """面试一道题，返回 (最终表现, 全部回答拼接, 逐轮对话记录)。
 
     answer 是错题本里的参考答案（如果有），追问判断时优先用它做对照。
+    asked_before：本场已问题目列表（session 上下文），注入追问判断。
     transcript 每轮记录 {round, answer, reason, followup_question, performance}，供复盘报告用。
     """
     points = get_expected_points(question, answer)
@@ -487,7 +497,8 @@ def interview_one(question: str, answer_fn, answer: str = "") -> tuple[str, str,
             break
         answers.append(answer)
 
-        judge = judge_followup(question, points, answer, round_num, cross_on_partial=True)
+        judge = judge_followup(question, points, answer, round_num,
+                               cross_on_partial=True, asked_before=asked_before)
         performance = judge.get("performance", "partial")
         transcript.append({
             "round": round_num,
@@ -640,6 +651,7 @@ def main():
 
     results = []
     current_section = None
+    asked_before: list[str] = []  # session 级上下文：本场已问题目，注入后续追问判断
     for idx, q in enumerate(questions, 1):
         if q["section"] != current_section:
             current_section = q["section"]
@@ -652,11 +664,14 @@ def main():
 
         try:
             ref_answer = q["item"].answer if q["item"] else ""
-            performance, answer_text, transcript = interview_one(q["question"], _ask, ref_answer)
+            performance, answer_text, transcript = interview_one(
+                q["question"], _ask, ref_answer, asked_before=asked_before
+            )
         except (KeyboardInterrupt, EOFError):
             print("\n\n已退出模拟面试（已答的题会保存）。")
             break
 
+        asked_before.append(q["question"])  # 答完记入面试官记忆
         results.append({
             "question": q["question"], "source": q.get("source", ""),
             "topic": q.get("topic", ""), "item": q.get("item"),
