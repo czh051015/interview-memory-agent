@@ -42,10 +42,13 @@ MAX_ROUNDS = MAX_FOLLOWUPS + 1  # 首答 + 2 次追问 = 3 轮
 
 
 # ══════════ 工具 1：读错题薄弱项 ══════════
-def get_weak_questions(top_k: int = WEAK_POOL_SIZE):
-    """读错题本 fail/partial，rank 排序取最薄弱的前 top_k（作为技术验证章的候选）。"""
-    fails = store.search(status="fail")
-    partials = store.search(status="partial")
+def get_weak_questions(top_k: int = WEAK_POOL_SIZE, space: str | None = None):
+    """读错题本 fail/partial，rank 排序取最薄弱的前 top_k（作为技术验证章的候选）。
+
+    space：Web 版多租户过滤（CLI 默认 None=不过滤）。
+    """
+    fails = store.search(status="fail", space=space, top_k=1000)
+    partials = store.search(status="partial", space=space, top_k=1000)
     items = fails + partials
     if not items:
         return []
@@ -164,19 +167,104 @@ _FOLLOWUP_PROMPT = (
     "追问要具体、往下钻，围绕候选人回答里的细节/数字/取舍往下问（可追问情境-任务-行动-结果），不要泛泛地问。"
 )
 
+# ── 量规版（L1）。追问判断同样四维约束 + 引原文证据，输出格式不变。 ──
+_RUBRIC_FOLLOWUP_PROMPT = (
+    "你是一位严格的面试官，正在依据固定评分量规考察候选人。你会收到：面试题、期望要点（可能为无）、候选人的回答。\n"
+    "评分量规（四个维度，判定必须逐维对照，判断依据必须引用回答原文）：\n"
+    "1. 正确性：核心事实与原理是否准确，有无硬伤；\n"
+    "2. 完整性：是否覆盖期望要点中的关键点（无期望要点时，自行判断这道题应包含哪些关键点）；\n"
+    "3. 深度：是否讲清机制/细节/取舍，而非泛泛而谈；\n"
+    "4. 表达：结构是否清晰，是否答非所问。\n"
+    "只输出 JSON：\n"
+    '{"need_followup": true/false, "followup_question": "追问问题", '
+    '"reason": "判断依据（必须引用原文，如：回答只说「…」未提「…」）", "performance": "pass"|"partial"|"fail"}\n'
+    "判定标准：四维均达标→pass 不再追问；1-2 个维度不足→partial 追问；存在事实错误或大段缺失→fail。\n"
+    "追问要具体、往下钻，围绕回答里的细节/数字/取舍，不要泛泛地问。"
+)
 
-def judge_followup(question: str, points: list[str], answer: str, round_num: int) -> dict:
-    """追问判断：LLM 输出结构化判断，兜底为 partial。"""
+
+def judge_followup(question: str, points: list[str], answer: str, round_num: int, *, use_rubric: bool = True) -> dict:
+    """追问判断：LLM 输出结构化判断，兜底为 partial。
+
+    use_rubric=True 时用量规版（四维约束 + 引原文证据），输出格式不变。
+    """
+    prompt = _RUBRIC_FOLLOWUP_PROMPT if use_rubric else _FOLLOWUP_PROMPT
     user_prompt = (
         f"面试题：{question}\n"
         f"期望要点：{points}\n"
         f"候选人回答（第{round_num}轮）：{answer}"
     )
     try:
-        return chat_json(_FOLLOWUP_PROMPT, user_prompt)
+        return chat_json(prompt, user_prompt)
     except Exception as e:
         logging.warning("追问判断失败，兜底 partial：%s", e)
         return {"need_followup": False, "followup_question": "", "reason": "判断失败", "performance": "partial"}
+
+
+# ══════════ 单轮判定（Web v1：无追问，LLM 出要点+差距+建议判定）══════════
+_SINGLE_JUDGE_PROMPT = (
+    "你是一位严格的面试官，正在考察候选人。你会收到：面试题、候选人的回答。\n"
+    "任务：判定回答质量，并给候选人对照。只输出 JSON：\n"
+    '{"points": ["应该答到的要点1", "要点2", ...], '
+    '"misses": ["回答里漏掉的点1", ...], '
+    '"suggested": "pass"|"partial"|"fail", '
+    '"reason": "一句判断依据"}\n'
+    "标准：覆盖大部分要点且条理清晰→pass；漏关键点或含糊→partial；明显不会或跑题→fail。\n"
+    "points 给 3-5 个（这道题应该答到什么），misses 只列确实漏掉/答错的（0-3 个，没有就给空数组）。\n"
+    "reason 一句话，指出最致命的差距。"
+)
+
+# ── 量规版（L1：出卷/阅卷解耦）。四维约束 + 必须引原文证据 + 三态输出不变。
+#    eval 达标后产品默认启用（use_rubric=True）；无参考答案时量规版自行判断应答要点。 ──
+_RUBRIC_SINGLE_PROMPT = (
+    "你是一位严格的面试官，正在依据固定评分量规考察候选人。你会收到：面试题、参考答案要点（可能为无）、候选人的回答。\n"
+    "评分量规（四个维度，判定必须逐维对照，misses 必须引用回答原文作为证据）：\n"
+    "1. 正确性：核心事实与原理是否准确，有无硬伤；\n"
+    "2. 完整性：是否覆盖参考答案要点中的关键点（无参考答案时，自行判断这道题应包含哪些关键点）；\n"
+    "3. 深度：是否讲清机制/细节/取舍，而非泛泛而谈；\n"
+    "4. 表达：结构是否清晰，是否答非所问。\n"
+    "只输出 JSON：\n"
+    '{"points": ["应该答到的要点1", ...], "misses": ["漏掉/答错的点，必须引用原文，如：回答只说「…」未提「…」", ...], '
+    '"suggested": "pass"|"partial"|"fail", "reason": "依据量规的一句判断"}\n'
+    "判定标准：四维均达标→pass；1-2 个维度明显不足→partial；存在事实错误或大段缺失→fail。\n"
+    "points 给 3-5 个，misses 只列确实漏掉/答错的（0-3 个，没有就给空数组）。"
+)
+
+
+def judge_single_round(
+    question: str,
+    answer: str,
+    *,
+    expected_points: list[str] | None = None,
+    use_rubric: bool = True,
+) -> dict:
+    """单轮判定（Web 版）：LLM 生成期望要点 + 差距 + 建议判定。失败兜底 partial。
+
+    expected_points：L2 独立金标准——传入参考答案要点时阅卷人对照金标准（不再自己现编）；
+                    不传则维持现状（LLM 自行生成要点，产品路径默认）。
+    use_rubric=True 时用量规版（L1 量规解耦：四维约束 + 引原文证据）。
+    输出：{points: [...], misses: [...], suggested: pass|partial|fail, reason: str}
+    """
+    points_section = ""
+    if expected_points:
+        points_section = "参考答案要点：\n" + "\n".join(f"- {p}" for p in expected_points) + "\n"
+    user_prompt = f"面试题：{question}\n{points_section}候选人回答：{answer}"
+    try:
+        data = chat_json(_RUBRIC_SINGLE_PROMPT if use_rubric else _SINGLE_JUDGE_PROMPT, user_prompt)
+        if not isinstance(data.get("points"), list) or not isinstance(data.get("misses"), list):
+            raise ValueError("points/misses 必须为数组")
+        suggested = data.get("suggested", "partial")
+        if suggested not in ("pass", "partial", "fail"):
+            suggested = "partial"
+        return {
+            "points": [str(p) for p in data["points"]],
+            "misses": [str(m) for m in data["misses"]],
+            "suggested": suggested,
+            "reason": str(data.get("reason", "")),
+        }
+    except Exception as e:
+        logging.warning("单轮判定失败，兜底 partial：%s", e)
+        return {"points": [], "misses": [], "suggested": "partial", "reason": "LLM 判定失败"}
 
 
 # ══════════ 工具 5：写回 ══════════
@@ -193,19 +281,45 @@ def record_result(item, performance: str, behaviors: list[str]):
 
 
 def _collect_new_item(r: dict) -> KnowledgeItem:
-    """面试中答差的新题（简历/JD/行为/动机来源），自动采集进错题本，来源可追溯。"""
+    """面试中答差的新题（简历/JD/行为/动机来源），自动采集进错题本，来源可追溯。
+
+    answer 用 r["feedback"] 作首个参考答案（模拟面试判定文本），没有则为空；
+    space 跟随当前空间（r["space"]，缺省 default——Web 版必须传，否则漏进默认空间）。
+    """
     status = ItemStatus.FAIL if r["performance"] == "fail" else ItemStatus.PARTIAL
     ki = KnowledgeItem(
         id=f"ki_{utcnow():%Y%m%d}_{uuid.uuid4().hex[:6]}_{r.get('source', 'mock')[:3]}",
         question=r["question"],
-        answer="",  # 模拟面试没有参考答案，靠下次面试/研究员补
+        answer=r.get("feedback") or "",  # 模拟面试 LLM 判定可作首个答案对照
         topic=r.get("topic", ""),
         status=status,
         source=ItemSource.MOCK_INTERVIEW,
         mastery_score=mastery.INITIAL_MASTERY[status],
         created_at=utcnow(),
+        space=r.get("space", "default"),
     )
     return record_birth(ki, reason=f"模拟面试表现 {r['performance']}", actor="mock_interview")
+
+
+def _feedback_text(performance: str, judge: dict) -> str:
+    """把 LLM 判定拼成可读文本，作为题目的「参考答案/面试官反馈」存 answer 字段。
+
+    judge: {points: [...], misses: [...], reason: str}；performance: fail/partial。
+    时间戳用本地时间（用户可读，不用 utcnow）。
+    """
+    from datetime import datetime
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    parts = [f"【模拟面试 {ts} · {performance}】"]
+    points = judge.get("points") or []
+    misses = judge.get("misses") or []
+    if points:
+        parts.append("应该答到：\n" + "\n".join(f"- {p}" for p in points))
+    if misses:
+        parts.append("漏掉的：\n" + "\n".join(f"- {m}" for m in misses))
+    if judge.get("reason"):
+        parts.append(f"面试官的话：{judge['reason']}")
+    return "\n".join(parts)
 
 
 def _write_back(results: list[dict], behaviors: list[str]):

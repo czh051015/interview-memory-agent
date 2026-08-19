@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "created": "2026-08-19",
+    "selected_by": "user（grill 候选清单勾选）",
+    "count": 11,
+    "purpose": "L3 判别 eval 样本题（人工定题，防被测 plan_interview 用自己的输出考自己）",
+    "note": "每题后续步骤：LLM 生成参考答案（L2）+ 4 类判别答案（good/mediocre/bad/confident），用户只校准 good 与 confident（约 20 条）。",
+    "source_material": ["data/resume.md", "data/jd.md", "错题本 fail/partial（36 条）"]
+  },
+  "questions": [
+    {
+      "id": "A1",
+      "group": "A",
+      "source": "weak",
+      "topic": "线程池",
+      "question": "讲一下 Java 线程池：核心参数有哪些？任务提交后线程池的执行流程是什么？有哪几种拒绝策略？"
+    },
+    {
+      "id": "A2",
+      "group": "A",
+      "source": "weak",
+      "topic": "死锁",
+      "question": "多线程编程中如何写一个死锁？死锁的四个必要条件是什么？请写出一段会发生死锁的代码，并说明如何避免死锁。"
+    },
+    {
+      "id": "A3",
+      "group": "A",
+      "source": "weak",
+      "topic": "类加载机制",
+      "question": "Class 文件是如何加载到 JVM 中的？类加载过程分为哪几步？什么是双亲委派模型？"
+    },
+    {
+      "id": "A4",
+      "group": "A",
+      "source": "weak",
+      "topic": "Agent 记忆",
+      "question": "Agent 的短期记忆和长期记忆分别是怎么实现的？分别适用于什么场景？两者如何配合？"
+    },
+    {
+      "id": "A5",
+      "group": "A",
+      "source": "weak",
+      "topic": "Agent 设计",
+      "question": "如果让你设计一个 Agent，你会考虑哪些模块？请按重要程度展开说明。"
+    },
+    {
+      "id": "A6",
+      "group": "A",
+      "source": "weak",
+      "topic": "代码搜索",
+      "question": "基于关键词的命令行代码搜索与基于 Embedding/RAG 的代码搜索，各有什么优缺点？各自适用什么场景？"
+    },
+    {
+      "id": "A7",
+      "group": "A",
+      "source": "weak",
+      "topic": "上下文压缩",
+      "question": "长时间编程任务很容易超出模型上下文窗口，你采用了什么上下文压缩机制？压缩之后如何维持多轮任务的记忆和执行效率？"
+    },
+    {
+      "id": "A8",
+      "group": "A",
+      "source": "weak",
+      "topic": "RAG 评估",
+      "question": "如何评估一个 RAG 系统的检索质量？'文档级召回率接近 99%'、'页面级召回率约 77%' 这两个指标分别是怎么定义的？怎么测量？"
+    },
+    {
+      "id": "B1",
+      "group": "B",
+      "source": "resume",
+      "topic": "项目深挖 · Provider-Session",
+      "question": "在 AI Coding Agent Runtime 项目中，你设计了 Provider-Session 显式绑定与统一协议适配层。请解释：什么是 Provider-Session 显式绑定？它解决了什么问题？为什么不直接用全局 Session？"
+    },
+    {
+      "id": "B2",
+      "group": "B",
+      "source": "resume",
+      "topic": "项目深挖 · Hierarchy Chunking",
+      "question": "在 Agentic RAG 平台中，你设计了 Root + Leaf Hierarchy Chunking 与 Leaf-only 检索架构。为什么只把 Leaf 叶子块写入向量库？检索命中后如何回填章节及页面级上下文？"
+    },
+    {
+      "id": "C1",
+      "group": "C",
+      "source": "jd",
+      "topic": "幻觉控制",
+      "question": "面向企业私有知识库的 RAG 应用，你会如何控制大模型的幻觉问题？请从检索、生成、评估三个环节展开。"
+    }
+  ]
+}

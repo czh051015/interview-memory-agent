@@ -1,0 +1,413 @@
+{
+  "meta": {
+    "generated": "2026-08-19",
+    "samples": 11,
+    "thresholds": {
+      "discrimination": 0.8,
+      "no_fool": 1.0
+    },
+    "note": "量规版注入 L2 参考答案；旧版不注入（模拟现状自生成要点）。no_fool=confident 未判 pass。"
+  },
+  "runs": [
+    {
+      "judge_mode": "rubric",
+      "samples": 11,
+      "metrics": {
+        "discrimination_rate": 1.0,
+        "order_ok_rate": 1.0,
+        "strict_order_rate": 0.9091,
+        "no_fool_rate": 1.0,
+        "question_pass_rate": 1.0
+      },
+      "per_question": [
+        {
+          "id": "A1",
+          "topic": "线程池",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A2",
+          "topic": "死锁",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "fail",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": false,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A3",
+          "topic": "类加载机制",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A4",
+          "topic": "Agent 记忆",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A5",
+          "topic": "Agent 设计",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A6",
+          "topic": "代码搜索",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A7",
+          "topic": "上下文压缩",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A8",
+          "topic": "RAG 评估",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "B1",
+          "topic": "项目深挖 · Provider-Session",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "B2",
+          "topic": "项目深挖 · Hierarchy Chunking",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "C1",
+          "topic": "幻觉控制",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        }
+      ]
+    },
+    {
+      "judge_mode": "legacy",
+      "samples": 11,
+      "metrics": {
+        "discrimination_rate": 1.0,
+        "order_ok_rate": 1.0,
+        "strict_order_rate": 0.8182,
+        "no_fool_rate": 1.0,
+        "question_pass_rate": 1.0
+      },
+      "per_question": [
+        {
+          "id": "A1",
+          "topic": "线程池",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A2",
+          "topic": "死锁",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "fail",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": false,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A3",
+          "topic": "类加载机制",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A4",
+          "topic": "Agent 记忆",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A5",
+          "topic": "Agent 设计",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A6",
+          "topic": "代码搜索",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A7",
+          "topic": "上下文压缩",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "A8",
+          "topic": "RAG 评估",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "fail",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": false,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "B1",
+          "topic": "项目深挖 · Provider-Session",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "fail"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "B2",
+          "topic": "项目深挖 · Hierarchy Chunking",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        },
+        {
+          "id": "C1",
+          "topic": "幻觉控制",
+          "judgments": {
+            "good": "pass",
+            "mediocre": "partial",
+            "bad": "fail",
+            "confident": "partial"
+          },
+          "checks": {
+            "good_gt_bad": true,
+            "order_ok": true,
+            "strict_order": true,
+            "no_fool": true,
+            "question_pass": true
+          }
+        }
+      ]
+    }
+  ]
+}
