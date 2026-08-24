@@ -5,6 +5,9 @@
   python run_interview.py --space 试玩   # 写入指定空间（默认 default）
   python run_interview.py 你的面经...   # 命令行直接贴复盘
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import sys, logging
 try:
     sys.stdout.reconfigure(encoding="utf-8")

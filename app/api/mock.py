@@ -9,7 +9,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from run_mock_interview import (
+from scripts.run_mock_interview import (
     WEAK_POOL_SIZE,
     get_weak_questions,
     judge_single_round,

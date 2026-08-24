@@ -27,7 +27,7 @@ from src.memory import review_log
 from src.memory.mastery import layer, effective_mastery, _elapsed_days
 from src.cleaner.schema import utcnow
 from src.llm import chat_json
-from run_remind import _notify_windows  # 桌面提醒唯一实现，复用（run_remind 只在函数内 import 本模块，无循环）
+from scripts.run_remind import _notify_windows  # 桌面提醒唯一实现，复用（run_remind 只在函数内 import 本模块，无循环）
 
 logger = logging.getLogger(__name__)
 

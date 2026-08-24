@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 """面经题标注 CLI —— 冷启动补给：把面经 unknown 题手动标 fail/partial，填入错题本。
 
 用法：
@@ -76,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"标注完成：fail {fail} | partial {partial} | 跳过 {skipped}")
     if changed:
         print(f"已写入错题本 {len(changed)} 条，开始参与掌握度衰减")
-    print("查看复习提醒: python run_mastery_demo.py")
+    print("查看复习提醒: python scripts/run_remind.py")
     return 0
 
 

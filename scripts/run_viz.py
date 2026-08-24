@@ -12,6 +12,9 @@
   python run_viz.py            → 生成 data/viz/report.html（单文件，内嵌 ECharts，离线可开）
   python run_viz.py --demo     → 额外生成一张「演示数据」轨迹图（标注非真实，用于 demo 展示形态）
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import json
 import sys
 from pathlib import Path

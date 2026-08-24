@@ -8,7 +8,7 @@
 """
 from unittest.mock import patch
 
-import run_mock_interview as mi
+import scripts.run_mock_interview as mi
 
 
 class TestJudgeSingleRound:

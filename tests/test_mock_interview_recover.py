@@ -2,7 +2,7 @@
 
 import pytest
 
-import run_mock_interview as mi
+import scripts.run_mock_interview as mi
 from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemSource
 
 

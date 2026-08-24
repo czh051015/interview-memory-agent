@@ -145,7 +145,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ### 2. 模拟面试（自适应出题 → 判定 → 写回）
 
 - **Web**：「模拟面试」页先上传简历 PDF / JD（`.pdf/.md/.txt`），点开始 → 按章节预览出题计划 → 逐题作答 → 可「追问」（最多 2 轮）→ 结束生成复盘报告。
-- **CLI**：`python run_mock_interview.py`。中途崩溃？`python run_mock_interview.py --recover` 幂等补写，掌握度不重复涨。
+- **CLI**：`python scripts/run_mock_interview.py`。中途崩溃？`python scripts/run_mock_interview.py --recover` 幂等补写，掌握度不重复涨。
 
 出题四层依据：
 
@@ -161,9 +161,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ### 3. 面试前提醒（主动性）
 
 ```bash
-python run_remind.py                  # 全部公司，打印完整分层
-python run_remind.py 字节              # 只提醒字节相关的题
-python run_remind.py --notify         # 静默检查：有「快忘了」的题才弹 Windows 桌面通知
+python scripts/run_remind.py                  # 全部公司，打印完整分层
+python scripts/run_remind.py 字节              # 只提醒字节相关的题
+python scripts/run_remind.py --notify         # 静默检查：有「快忘了」的题才弹 Windows 桌面通知
 ```
 
 `--notify` 模式供每日定时任务（如每天 22:00）调用：没有快忘的题就闭嘴，不打扰你。
@@ -172,11 +172,11 @@ python run_remind.py --notify         # 静默检查：有「快忘了」的题�
 
 ```bash
 # 1. 预处理并导入网上面经题库（source=public_jingyan，status=unknown，只是补给池）
-python run_preprocess.py --import
+python scripts/run_preprocess.py --import
 
 # 2. 逐条标注面经题（f=不会 / p=半会 / x=跳过），标过的进入你的错题本
 #    参与掌握度衰减 + 复习提醒；跳过则保持 unknown，不进错题本
-python annotate_jingyan.py
+python scripts/annotate_jingyan.py
 ```
 
 > 种子数据在 `data/seed/public_jingyan.txt`（每行一题）。标注起点 `last_reviewed_at` 设为标注时刻，避免旧题被误衰减到 0。
@@ -188,7 +188,7 @@ python annotate_jingyan.py
 ```mermaid
 flowchart TB
     subgraph 入口层
-        CLI["CLI 脚本<br/>run_*.py / offerloop.py"]
+        CLI["CLI 脚本<br/>scripts/ / offerloop.py"]
         WEB["FastAPI<br/>app/main.py :8000"]
         FE["前端 Next.js<br/>frontend/out（静态导出）"]
     end
@@ -358,7 +358,7 @@ offerloop/
 │   └── market/              # 面经冷启动
 │       ├── jingyan.py       # 网上面经导入（source=public_jingyan）
 │       └── jingyan_preprocess.py # docx 面经预处理
-├── run_*.py                 # CLI 入口（记错题 / 模拟面试 / 提醒 / 复习 / 预处理）
+├── scripts/                 # CLI 入口（记错题 / 模拟面试 / 提醒 / 复习 / 预处理）
 ├── tests/                   # 220 个单元测试（19 文件）
 ├── eval/                    # 评估脚本（检索 / 判卷 / 出题质量）
 ├── frontend/                # Next.js 前端（静态导出）

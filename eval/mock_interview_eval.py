@@ -32,7 +32,7 @@ except (AttributeError, ValueError, OSError):
     pass
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from run_mock_interview import judge_single_round
+from scripts.run_mock_interview import judge_single_round
 from src.config import CROSS_MODEL
 
 EVAL_DIR = Path(__file__).resolve().parent

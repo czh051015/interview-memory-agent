@@ -16,6 +16,9 @@
 """
 
 import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import sys
 import io
 import base64
 import subprocess

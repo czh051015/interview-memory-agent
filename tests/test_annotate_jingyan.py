@@ -34,8 +34,8 @@ def test_only_writes_changed_items():
     with patch("src.memory.knowledge_store.search", return_value=items), \
          patch("src.memory.knowledge_store.store_items") as mock_store, \
          patch("builtins.input", prompt):
-        import annotate_jingyan
-        rc = annotate_jingyan.main([])
+        import scripts.annotate_jingyan
+        rc = scripts.annotate_jingyan.main([])
 
     assert rc == 0
     mock_store.assert_called_once()
@@ -48,8 +48,8 @@ def test_no_unknown_returns_without_write():
     """库里没有待标面经题时，不写库，正常返回。"""
     with patch("src.memory.knowledge_store.search", return_value=[]), \
          patch("src.memory.knowledge_store.store_items") as mock_store:
-        import annotate_jingyan
-        rc = annotate_jingyan.main([])
+        import scripts.annotate_jingyan
+        rc = scripts.annotate_jingyan.main([])
 
     assert rc == 0
     mock_store.assert_not_called()
@@ -70,8 +70,8 @@ def test_filters_out_info_category():
     with patch("src.memory.knowledge_store.search", return_value=items), \
          patch("src.memory.knowledge_store.store_items") as mock_store, \
          patch("builtins.input", prompt):
-        import annotate_jingyan
-        rc = annotate_jingyan.main([])
+        import scripts.annotate_jingyan
+        rc = scripts.annotate_jingyan.main([])
 
     assert rc == 0
     written = mock_store.call_args[0][0]

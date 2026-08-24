@@ -9,6 +9,9 @@
 
 输出：迁移条数；--dry-run 只看不改。
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import argparse
 import logging
 

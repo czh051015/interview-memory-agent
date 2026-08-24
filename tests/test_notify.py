@@ -1,6 +1,6 @@
 """run_remind toast 通知测试（mock PowerShell，不实际弹窗）。"""
 
-import run_remind as rr
+import scripts.run_remind as rr
 
 
 class TestToastNotify:

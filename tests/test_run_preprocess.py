@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import run_preprocess as rp
+import scripts.run_preprocess as rp
 from src.market import jingyan as jingyan_mod
 from src.market import jingyan_preprocess as preprocess_mod
 

@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 """秋招 Copilot —— docx 面经预处理 CLI（jingyan_preprocess 入口封装）。
 
 用法：

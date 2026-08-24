@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch
 
-import run_mock_interview as mi
+import scripts.run_mock_interview as mi
 from src.cleaner.schema import KnowledgeItem, ItemStatus
 
 
@@ -220,7 +220,7 @@ class TestDynamicSession:
 
         seeds: {章节: [题dict]} 作为种子池；decide_next 被 mock 成按序返回 decisions。
         """
-        from run_mock_interview import run_dynamic_session
+        from scripts.run_mock_interview import run_dynamic_session
         pool = {name: [dict(q) for q in qs] for name, qs in seeds.items()}
         order = list(seeds.keys())
         ai = iter(answers)
@@ -267,7 +267,7 @@ class TestDynamicSession:
 
     def test_max_total_questions_cap(self):
         """硬约束：整场题数不超 MAX_TOTAL_QUESTIONS。"""
-        from run_mock_interview import MAX_TOTAL_QUESTIONS
+        from scripts.run_mock_interview import MAX_TOTAL_QUESTIONS
         # 无限 deep_dive，靠 generate 兜底出题，验证总数封顶
         seeds = {"技术验证": [{"question": "Q1", "source": "weak"}]}
         decisions = [{"action": "deep_dive", "guidance": "追", "reason": "差"} for _ in range(50)]
