@@ -134,7 +134,7 @@ def mock_start(req: MockStartRequest):
         logging.warning("画像读取失败，出题不依赖：%s", e)
 
     try:
-        profile = _read_profile()
+        profile = _read_profile(space=req.space)
         sections = plan_interview(
             profile["resume"], profile["jd"], weak_items,
             focus_topics=focus_topics,

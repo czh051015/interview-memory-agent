@@ -23,16 +23,13 @@ import logging
 from dataclasses import dataclass, field
 
 from src.memory import knowledge_store as store
-from src.memory.mastery import rank, effective_mastery, _elapsed_days
+from src.memory import review_log
+from src.memory.mastery import layer, effective_mastery, _elapsed_days
 from src.cleaner.schema import utcnow
 from src.llm import chat_json
-from src.config import space_dir
+from run_remind import _notify_windows  # 桌面提醒唯一实现，复用（run_remind 只在函数内 import 本模块，无循环）
 
 logger = logging.getLogger(__name__)
-
-# 分层阈值（与 run_remind 一致）
-GAP_RED = 0.5    # 快忘了
-GAP_YELLOW = 0.2  # 该看看
 
 _KEEPER_PROMPT = (
     "你是 OfferLoop 的记忆管家，负责维护候选人的面试记忆、安排复习。你会收到："
@@ -82,83 +79,26 @@ def read_memory_state(space: str | None = None) -> MemorySnapshot:
         + store.search(status="partial", space=space, top_k=1000)
     )
     snap = MemorySnapshot(total_weak=len(items))
-    for it in rank(items, now=now):
-        em = effective_mastery(it, now)
-        gap = round(1.0 - em, 3)
-        row = {
-            "id": it.id,
-            "question": it.question,
-            "status": it.status.value,
-            "mastery": round(em, 3),
-            "gap": gap,
-            "days": int(_elapsed_days(it, now)),
-            "behavior_tags": list(it.behavior_tags or []),
-        }
-        if gap >= GAP_RED:
-            snap.red.append(row)
-        elif gap >= GAP_YELLOW:
-            snap.yellow.append(row)
-        else:
-            snap.green.append(row)
+    red, yellow, green = layer(items, now=now)
+    for tier, rows in (("red", red), ("yellow", yellow), ("green", green)):
+        for it in rows:
+            em = effective_mastery(it, now)
+            getattr(snap, tier).append({
+                "id": it.id,
+                "question": it.question,
+                "status": it.status.value,
+                "mastery": round(em, 3),
+                "gap": round(1.0 - em, 3),
+                "days": int(_elapsed_days(it, now)),
+                "behavior_tags": list(it.behavior_tags or []),
+            })
     return snap
 
 
 def read_review_history(space: str | None = None, limit: int = 10) -> list[dict]:
     """工具 2：读 review_log 最近复习轨迹。只读不写。"""
-    path = space_dir() / "review_log.jsonl"
-    if not path.exists():
-        return []
-    events = []
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                events.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    except OSError:
-        return []
-    return events[-limit:]
-
-
-def _notify_windows(title: str, body: str) -> bool:
-    """工具 3：桌面提醒（复用 run_remind 的实现，避免循环依赖则内联）。"""
-    import base64
-    import subprocess
-    from xml.sax.saxutils import escape as _xml_escape
-
-    _TOAST_APP_ID = r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
-    xml = (
-        '<toast><visual><binding template="ToastText02">'
-        f'<text id="1">{_xml_escape(title)}</text>'
-        f'<text id="2">{_xml_escape(body)}</text>'
-        "</binding></visual></toast>"
-    )
-    b64 = base64.b64encode(xml.encode("utf-8")).decode("ascii")
-    ps = (
-        f"$b64 = '{b64}'\n"
-        "$xmlStr = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))\n"
-        "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null\n"
-        "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null\n"
-        "$xml = New-Object Windows.Data.Xml.Dom.XmlDocument\n"
-        "$xml.LoadXml($xmlStr)\n"
-        "$toast = New-Object Windows.UI.Notifications.ToastNotification $xml\n"
-        f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{_TOAST_APP_ID}').Show($toast)\n"
-    )
-    try:
-        r = subprocess.run(
-            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
-            capture_output=True, timeout=30,
-        )
-        if r.returncode != 0:
-            err = (r.stderr or b"").decode("utf-8", errors="ignore").strip()
-            logger.warning("toast 失败（exit %s）: %s", r.returncode, err[:200])
-        return r.returncode == 0
-    except Exception as e:
-        logger.warning("toast 异常: %s", e)
-        return False
+    del space  # 日志按空间落盘，read() 已在当前空间目录读；入参保留以兼容工具签名
+    return review_log.read(limit=limit)
 
 
 def plan_review(snap: MemorySnapshot, history: list[dict]) -> dict:

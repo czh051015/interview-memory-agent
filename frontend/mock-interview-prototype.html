@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OfferLoop · 模拟面试前端原型（grill v1 单轮版）</title>
+<style>
+  :root {
+    --primary: #4f46e5;
+    --primary-hover: #4338ca;
+    --primary-light: #eef2ff;
+    --danger: #dc2626;
+    --warn: #d97706;
+    --ok: #16a34a;
+    --border: #e4e4e7;
+    --bg: #fafafa;
+    --card: #ffffff;
+    --text: #18181b;
+    --muted: #71717a;
+    --radius: 14px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app {
+    max-width: 720px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: var(--card);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  /* Header */
+  .header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--primary);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; letter-spacing: -0.5px;
+  }
+  .header-title { font-size: 15px; font-weight: 600; }
+  .header-sub { font-size: 12px; color: var(--muted); }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .pill {
+    font-size: 11px; padding: 3px 10px; border-radius: 999px;
+    background: var(--primary-light); color: var(--primary); font-weight: 600;
+  }
+  .pill.green { background: #dcfce7; color: #15803d; }
+  .pill.amber { background: #fef3c7; color: #b45309; }
+  .pill.red { background: #fee2e2; color: #b91c1c; }
+  .pill.gray { background: #f4f4f5; color: #52525b; }
+
+  /* Progress bar */
+  .progress-wrap { padding: 0 20px 10px; }
+  .progress-track { height: 5px; border-radius: 99px; background: #f1f0f5; overflow: hidden; }
+  .progress-fill {
+    height: 100%; border-radius: 99px; background: var(--primary);
+    transition: width 0.4s ease;
+  }
+  .progress-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+  /* Layout */
+  .content { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .center { align-items: center; justify-content: center; }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card-sub { font-size: 12px; color: var(--muted); }
+
+  /* Question */
+  .q-tags { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .q-text { font-size: 17px; font-weight: 600; line-height: 1.5; }
+  .q-meta { margin-top: 10px; font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .q-meta b { color: var(--text); font-weight: 600; }
+
+  /* Answer box */
+  textarea {
+    width: 100%; min-height: 120px; resize: vertical;
+    border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; font-size: 14px; font-family: inherit; line-height: 1.7;
+    outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.12); }
+
+  /* Buttons */
+  .btn {
+    border: none; border-radius: 10px; padding: 10px 18px;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-primary:disabled { background: #c7c7d1; cursor: not-allowed; }
+  .btn-outline { background: #fff; border: 1.5px solid var(--border); color: var(--text); }
+  .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-ghost { background: transparent; color: var(--muted); }
+  .btn-ghost:hover { background: #f4f4f5; color: var(--text); }
+  .btn-block { width: 100%; }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; }
+
+  /* Verdict choices */
+  .verdict-group { display: flex; flex-direction: column; gap: 8px; }
+  .verdict-option {
+    display: flex; align-items: flex-start; gap: 12px;
+    border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; cursor: pointer; transition: all 0.15s; background: #fff;
+  }
+  .verdict-option:hover { border-color: #a5b4fc; }
+  .verdict-option.selected {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+  }
+  .verdict-radio {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid #d4d4d8; flex-shrink: 0; margin-top: 2px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .verdict-option.selected .verdict-radio { border-color: var(--primary); }
+  .verdict-option.selected .verdict-radio::after {
+    content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--primary);
+  }
+  .verdict-label { font-size: 14px; font-weight: 600; }
+  .verdict-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .verdict-badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600;
+    background: var(--primary-light); color: var(--primary); margin-left: auto; flex-shrink: 0;
+  }
+
+  /* Expected points */
+  .points-list { display: flex; flex-direction: column; gap: 8px; }
+  .point-item { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .point-ic {
+    width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; margin-top: 2px;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff;
+  }
+  .point-hit { background: var(--ok); }
+  .point-miss { background: #f43f5e; }
+
+  /* Gap analysis */
+  .gap-box {
+    border-left: 3px solid var(--warn);
+    background: #fffbeb;
+    border-radius: 0 10px 10px 0;
+    padding: 10px 14px; font-size: 13px; color: #92400e;
+  }
+  .gap-box strong { color: #78350f; }
+
+  /* Typing dots */
+  .dots { display: inline-flex; gap: 5px; }
+  .dots span {
+    width: 7px; height: 7px; border-radius: 50%; background: #a1a1aa;
+    animation: blink 1.2s infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+  /* Fade in */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .fade { animation: fadeUp 0.3s ease both; }
+
+  /* Report */
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px; text-align: center;
+    background: #fff;
+  }
+  .stat-num { font-size: 26px; font-weight: 700; }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .stat-num.red { color: var(--danger); }
+  .stat-num.amber { color: var(--warn); }
+  .stat-num.green { color: var(--ok); }
+
+  .report-item {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: #fff;
+  }
+  .report-item-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+  .report-item-answer { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .report-item-reason { font-size: 13px; margin-top: 8px; padding: 8px 10px; background: #f8f8fa; border-radius: 8px; }
+
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #f1f0f5; color: #52525b; margin: 3px 4px 0 0; font-weight: 500; }
+
+  .footer-note { text-align: center; font-size: 11px; color: #a1a1aa; padding: 16px 20px 24px; }
+
+  .hidden { display: none !important; }
+
+  .section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    color: #a1a1aa; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .divider { height: 1px; background: var(--border); margin: 6px 0; }
+
+  .interviewer {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--primary-light); color: var(--primary);
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    flex-shrink: 0;
+  }
+  .bubble {
+    background: #f4f4f5; border-radius: 4px 14px 14px 14px;
+    padding: 10px 14px; font-size: 14px; max-width: 85%;
+  }
+  .user-bubble {
+    background: var(--primary); color: #fff;
+    border-radius: 14px 4px 14px 14px;
+    padding: 10px 14px; font-size: 14px; max-width: 85%; align-self: flex-end;
+    white-space: pre-wrap;
+  }
+  .chat-row { display: flex; flex-direction: column; gap: 10px; }
+  .chat-row .user-line { display: flex; justify-content: flex-end; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ======== Header ======== -->
+  <div class="header">
+    <div class="logo">O</div>
+    <div>
+      <div class="header-title">OfferLoop · 模拟面试</div>
+      <div class="header-sub" id="headerSub">面试官 Agent v1 · 单轮版</div>
+    </div>
+    <div class="header-right">
+      <span class="pill" id="statusPill">准备中</span>
+    </div>
+  </div>
+
+  <!-- ======== Progress ======== -->
+  <div class="progress-wrap hidden" id="progressWrap">
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-meta">
+      <span id="progressLabel">第 1 / 5 题</span>
+      <span id="gapHint"></span>
+    </div>
+  </div>
+
+  <div class="content" id="content"></div>
+
+  <div class="footer-note">原型演示 · 数据为真实错题 mock · 双击即可交互</div>
+</div>
+
+<script>
+/* =====================================================================
+   OfferLoop 模拟面试 · 前端交互原型
+   grill 推荐实现：Q1(a)只考错题 / Q2(c)LLM给要点+差距+建议判定+用户确认
+                  / Q3(a)LLM现场生成要点 / Q4(c)v1单轮
+   状态机：setup → question → judging → verdict → (next | report)
+   ===================================================================== */
+
+/* ---------- Mock 数据：真实错题（来自 knowledge_store） ---------- */
+const QUESTIONS = [
+  {
+    id: "ki_video_model",
+    question: "视频分析使用了什么模型？具体是哪一个模型？",
+    topic: "视频模型",
+    status: "fail",
+    mastery: 0.5,
+    days: 12,
+    expected: ["说清模型名称与厂商（如 Gemini / GPT-4o / 开源多模态）", "说明模型输入模态（视频帧 / 音频 / 文本）", "点出模型选型的上下文（项目约束）"],
+    miss: ["模型名称模糊，只说'多模态大模型'", "没说明是逐帧抽帧还是整段视频输入", "没提为什么这个模型可行（上下文/成本）"],
+    suggested: "fail",
+    reason: "核心考点是'具体到型号 + 输入形态'，回答只到'多模态模型'这一层，没有落点。",
+  },
+  {
+    id: "ki_model_selection",
+    question: "为什么选择这个模型？模型选型依据是什么？",
+    topic: "模型选型",
+    status: "fail",
+    mastery: 0.5,
+    days: 9,
+    expected: ["给出 2-3 个候选模型并比较", "依据：效果 / 成本 / 上下文长度 / 延迟", "结合项目约束说明取舍"],
+    miss: ["只说'因为它效果好'，无对比", "没提 Token 成本与免费额度约束", "没讲清取舍逻辑（为什么不是别的模型）"],
+    suggested: "partial",
+    reason: "有选型方向但缺对比和量化依据，追问成本约束时接不住。",
+  },
+  {
+    id: "ki_token_cost",
+    question: "一段十几分钟或五十分钟的视频，大约会消耗多少 Token？是否会超出上下文或免费额度？",
+    topic: "Token 消耗",
+    status: "fail",
+    mastery: 1.0,
+    days: 20,
+    expected: ["能估算：音频/ASR 文本量 → token 量级", "对照模型上下文窗口（如 128K）", "判断是否超限，给出降本手段"],
+    miss: ["没有数量级概念（一分钟音频约多少字）", "没对照上下文窗口上限", "没提降本方案（分段 / 抽帧 / 只转写）"],
+    suggested: "fail",
+    reason: "完全没进入估算，直接卡住，属于典型的'没背过数'。",
+  },
+  {
+    id: "ki_audio_video",
+    question: "为什么视频转写后的 Token 数量这么少？系统实际处理的是视频、音频，还是 ASR 转写文本？",
+    topic: "视频处理",
+    status: "fail",
+    mastery: 0.5,
+    days: 6,
+    expected: ["明确系统处理的是 ASR 转写文本而非原始视频", "解释为何 token 少（视频→音频→文本的信息压缩）", "说明原始视频信息（画面）丢失了什么"],
+    miss: ["混淆了'处理视频'与'处理转写文本'", "没讲清信息压缩链条", "没讨论画面信息丢失的影响"],
+    suggested: "partial",
+    reason: "答对了一半（知道是文本），但没讲清压缩链条和丢失的信息，追问画面内容就露馅。",
+  },
+  {
+    id: "ki_project_intro",
+    question: "展开介绍一下长视频理解项目：项目背景、要解决的问题，以及遇到的困难",
+    topic: "项目介绍",
+    status: "fail",
+    mastery: 0.8,
+    days: 3,
+    expected: ["背景：为什么做长视频理解（场景/痛点）", "问题：具体要解决什么（如超长上下文）", "困难：至少 1 个真实技术难点 + 解法"],
+    miss: ["背景只说了'导师让做的'，无场景", "困难讲成了'代码写不出来'而非技术难点", "没讲清楚与现有方案差异"],
+    suggested: "partial",
+    reason: "框架完整但细节空洞，'困难'是面试官必挖的点，这个回答撑不住追问。",
+  },
+];
+
+const BEHAVIORS = ["答不到点", "表达绕弯"];
+
+/* ---------- 会话状态 ---------- */
+const state = {
+  phase: "setup",        // setup | question | judging | verdict | report
+  idx: 0,                // 当前题 index
+  answers: [],           // 每题的答案
+  verdicts: [],          // 每题最终判定（用户确认后的）
+  suggested: [],         // 每题 LLM 建议判定
+};
+
+const $content = document.getElementById("content");
+const $progressWrap = document.getElementById("progressWrap");
+const $progressFill = document.getElementById("progressFill");
+const $progressLabel = document.getElementById("progressLabel");
+const $gapHint = document.getElementById("gapHint");
+const $statusPill = document.getElementById("statusPill");
+const $headerSub = document.getElementById("headerSub");
+
+/* ---------- 工具 ---------- */
+function esc(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function pillFor(status) {
+  const map = { fail: '<span class="pill red">❌ fail</span>', partial: '<span class="pill amber">⚠️ partial</span>', pass: '<span class="pill green">✅ pass</span>' };
+  return map[status] || "";
+}
+function setProgress() {
+  const total = QUESTIONS.length;
+  const done = state.idx;
+  $progressFill.style.width = (done / total * 100) + "%";
+  $progressLabel.textContent = state.phase === "report" ? `完成 ${total}/${total}` : `第 ${done + 1} / ${total} 题`;
+}
+function setPill(text, kind) {
+  $statusPill.className = "pill " + (kind || "");
+  $statusPill.textContent = text;
+}
+
+/* ---------- 视图：setup（开场：说明考谁的题） ---------- */
+function renderSetup() {
+  state.phase = "setup";
+  $progressWrap.classList.add("hidden");
+  setPill("即将开始", "gray");
+
+  const list = QUESTIONS.map((q, i) => `
+    <div class="card" style="padding:12px 16px">
+      <div class="q-tags">
+        ${pillFor(q.status)}
+        <span class="pill gray">${esc(q.topic)}</span>
+        <span class="pill amber">${q.days} 天没复习</span>
+      </div>
+      <div style="font-size:14px;font-weight:500">${esc(q.question)}</div>
+    </div>`).join("");
+
+  $content.innerHTML = `
+    <div class="card fade">
+      <div class="card-title">🎯 本场考你的错题本</div>
+      <div class="card-sub">
+        <b>出题范围：</b>只考你栽过的题（fail / partial，按遗忘 gap 排序）——
+        面试官考的不是题库，是你<b>现在最该被检验的薄弱点</b>。<br/><br/>
+        <b>答题方式：</b>v1 单轮 · 每道一答一判，LLM 面试官现场给<b>参考要点 + 差距</b>，
+        建议一个判定，<b>你最终拍板</b>。<br/>
+        <b>本场规模：</b>${QUESTIONS.length} 题 · 全部来自错题本 · 结束后写回掌握度。
+      </div>
+      <div class="divider"></div>
+      <div class="section-label">本场题目（${QUESTIONS.length} 道）</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${list}</div>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary btn-block" onclick="startInterview()">开始面试 →</button>
+      </div>
+    </div>`;
+}
+
+/* ---------- 视图：question（出题 + 回答） ---------- */
+function renderQuestion() {
+  state.phase = "question";
+  $progressWrap.classList.remove("hidden");
+  setProgress();
+  setPill("答题中", "amber");
+  $headerSub.textContent = "面试官 Agent v1 · 单轮版";
+
+  const q = QUESTIONS[state.idx];
+  $content.innerHTML = `
+    <div class="chat-row fade">
+      <div class="interviewer">
+        <div class="avatar">🧑‍💼</div>
+        <div class="bubble">
+          <div style="font-size:11px;color:#8b8b94;margin-bottom:4px">面试官 · 第 ${state.idx + 1} 题</div>
+          <div style="font-weight:600;font-size:15px">${esc(q.question)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="card fade">
+      <div class="q-tags">
+        ${pillFor(q.status)}
+        <span class="pill gray">${esc(q.topic)}</span>
+        <span class="pill amber">gap ${Math.round((1 - q.mastery) * 100)}% · ${q.days} 天没复习</span>
+      </div>
+      <div class="q-meta">
+        <span>🎯 <b>考点：</b>${esc(q.topic)}</span>
+        <span>📌 <b>规则：</b>作答后面试官给要点对照，你确认判定</span>
+      </div>
+    </div>
+    <div class="fade">
+      <textarea id="answerBox" placeholder="在真实面试中你会怎么回答这道题？打在这里..."></textarea>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-outline" onclick="renderSetup()">退出面试</button>
+        <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()">提交回答 →</button>
+      </div>
+    </div>`;
+
+  document.getElementById("answerBox").focus();
+}
+
+/* ---------- 提交 → judging（模拟 LLM 判卷） ---------- */
+function submitAnswer() {
+  const box = document.getElementById("answerBox");
+  const answer = box.value.trim();
+  if (!answer) { box.focus(); box.style.borderColor = "var(--danger)"; return; }
+
+  state.phase = "judging";
+  setPill("判卷中", "gray");
+  $headerSub.textContent = "LLM 面试官正在生成期望要点与差距...";
+  const submitBtn = document.getElementById("submitBtn");
+  if (submitBtn) submitBtn.disabled = true;
+
+  $content.innerHTML = `
+    <div class="chat-row fade">
+      <div class="interviewer">
+        <div class="avatar">🧑‍💼</div>
+        <div class="bubble">收到，我对照一下这道题应该答到的要点...</div>
+      </div>
+      <div class="user-line"><div class="user-bubble">${esc(answer)}</div></div>
+    </div>
+    <div class="card fade" style="text-align:center;padding:28px">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:12px">
+        LLM 面试官正在生成：期望要点 → 差距分析 → 建议判定
+      </div>
+    </div>`;
+
+  // 模拟 LLM 延迟（真实实现：POST /api/mock/verdict）
+  setTimeout(() => {
+    state.answers.push(answer);
+    renderVerdict();
+  }, 1400);
+}
+
+/* ---------- 视图：verdict（判定卡：要点 + 差距 + 建议 + 用户确认） ---------- */
+function renderVerdict() {
+  state.phase = "verdict";
+  const q = QUESTIONS[state.idx];
+  const s = q.suggested;
+
+  setPill("等待确认", "amber");
+  $headerSub.textContent = "LLM 判定完成 · 请确认";
+  setProgress();
+
+  const pointsHtml = q.expected.map((p, i) => `
+    <div class="point-item">
+      <div class="point-ic point-hit">✓</div>
+      <div>${esc(p)}</div>
+    </div>`).join("");
+
+  const missHtml = q.miss.map((m, i) => `
+    <div class="point-item">
+      <div class="point-ic point-miss">✗</div>
+      <div>${esc(m)}</div>
+    </div>`).join("");
+
+  const verdictLabel = { pass: "答对了 ✅", partial: "一半 ⚠️", fail: "没答上 ❌" };
+
+  $content.innerHTML = `
+    <div class="card fade" style="border-color:#c7d2fe">
+      <div class="card-title">🧑‍💼 面试官判定 <span class="pill" style="margin-left:auto">LLM 建议：${verdictLabel[s]}</span></div>
+      <div class="card-sub" style="margin-bottom:12px">${esc(q.reason)}</div>
+
+      <div class="section-label">✅ 这道题应该答到</div>
+      <div class="points-list" style="margin-bottom:14px">${pointsHtml}</div>
+
+      <div class="section-label">✗ 你漏掉的 / 差距</div>
+      <div class="points-list" style="margin-bottom:14px">${missHtml}</div>
+
+      <div class="section-label">⚠️ 面试官的话</div>
+      <div class="gap-box">${esc(q.reason)}</div>
+    </div>
+
+    <div class="card fade">
+      <div class="card-title">🏁 最终判定 <span style="font-size:11px;color:var(--muted);font-weight:400">（LLM 建议已预选，你可以改——你说了算）</span></div>
+      <div class="verdict-group" id="verdictGroup">
+        <div class="verdict-option ${s === "pass" ? "selected" : ""}" data-v="pass" onclick="pickVerdict('pass')">
+          <div class="verdict-radio"></div>
+          <div>
+            <div class="verdict-label">答对了 ✅</div>
+            <div class="verdict-desc">要点基本覆盖，这道题下次面试能直接过</div>
+          </div>
+          <div class="verdict-badge">+掌握度</div>
+        </div>
+        <div class="verdict-option ${s === "partial" ? "selected" : ""}" data-v="partial" onclick="pickVerdict('partial')">
+          <div class="verdict-radio"></div>
+          <div>
+            <div class="verdict-label">一半 ⚠️</div>
+            <div class="verdict-desc">答了主干漏了细节，值得再看一遍</div>
+          </div>
+          <div class="verdict-badge">保持</div>
+        </div>
+        <div class="verdict-option ${s === "fail" ? "selected" : ""}" data-v="fail" onclick="pickVerdict('fail')">
+          <div class="verdict-radio"></div>
+          <div>
+            <div class="verdict-label">没答上 ❌</div>
+            <div class="verdict-desc">核心没答到，面试前必须再看</div>
+          </div>
+          <div class="verdict-badge">-掌握度</div>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-outline" onclick="retryAnswer()">重答此题</button>
+        <button class="btn btn-primary" id="confirmBtn" onclick="confirmVerdict()">
+          ${state.idx === QUESTIONS.length - 1 ? "确认，查看报告 🏁" : "确认，下一题 →"}
+        </button>
+      </div>
+    </div>`;
+}
+
+function pickVerdict(v) {
+  document.querySelectorAll(".verdict-option").forEach(el => {
+    el.classList.toggle("selected", el.dataset.v === v);
+  });
+}
+function retryAnswer() {
+  state.answers.pop();
+  renderQuestion();
+}
+function confirmVerdict() {
+  const sel = document.querySelector(".verdict-option.selected");
+  const v = sel ? sel.dataset.v : "partial";
+  state.verdicts.push(v);
+  state.suggested.push(QUESTIONS[state.idx].suggested);
+
+  if (state.idx < QUESTIONS.length - 1) {
+    state.idx++;
+    renderQuestion();
+  } else {
+    renderReport();
+  }
+}
+
+/* ---------- 视图：report（本场报告 + 写回说明） ---------- */
+function renderReport() {
+  state.phase = "report";
+  $progressWrap.classList.remove("hidden");
+  setProgress();
+  setPill("面试结束", "green");
+  $headerSub.textContent = "本场报告 · 结果已写回错题本";
+
+  const counts = { pass: 0, partial: 0, fail: 0 };
+  state.verdicts.forEach(v => counts[v]++);
+
+  const itemsHtml = QUESTIONS.map((q, i) => {
+    const v = state.verdicts[i];
+    const sv = state.suggested[i];
+    const agree = v === sv ? "与 LLM 一致" : "已改判";
+    return `
+      <div class="report-item">
+        <div class="report-item-head">
+          ${pillFor(v)}
+          <span class="pill gray">${esc(q.topic)}</span>
+          <span class="pill ${agree === "已改判" ? "amber" : "green"}" style="margin-left:auto">${agree}</span>
+        </div>
+        <div style="font-size:13px;font-weight:500;margin-top:6px">${esc(q.question)}</div>
+        <div class="report-item-answer">你的回答：${esc((state.answers[i] || "").slice(0, 60))}${(state.answers[i] || "").length > 60 ? "…" : ""}</div>
+        <div class="report-item-reason">💡 ${esc(q.reason)}</div>
+      </div>`;
+  }).join("");
+
+  $content.innerHTML = `
+    <div class="fade">
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-num green">${counts.pass}</div><div class="stat-label">✅ 答对</div></div>
+        <div class="stat"><div class="stat-num amber">${counts.partial}</div><div class="stat-label">⚠️ 一半</div></div>
+        <div class="stat"><div class="stat-num red">${counts.fail}</div><div class="stat-label">❌ 没答上</div></div>
+      </div>
+
+      <div class="card fade" style="margin-top:16px">
+        <div class="card-title">🧠 你的行为特征（整场总结）</div>
+        <div>
+          ${BEHAVIORS.map(b => `<span class="tag">${esc(b)}</span>`).join("")}
+        </div>
+        <div class="card-sub" style="margin-top:8px">已写入错题本，下次面试前提醒会带上。</div>
+      </div>
+
+      <div class="card fade" style="margin-top:16px">
+        <div class="card-title">💾 已写回错题本</div>
+        <div class="card-sub">
+          · fail 题 → mastery 下降（下次提醒优先级提升）<br/>
+          · partial 题 → 保持，进入复习队列<br/>
+          · 行为特征标签 → 合并到对应 item
+        </div>
+        <div style="margin-top:12px" class="btn-row">
+          <button class="btn btn-outline" onclick="renderSetup()">再来一场</button>
+          <button class="btn btn-primary" onclick="window.print()">打印报告</button>
+        </div>
+      </div>
+
+      <div class="card fade" style="margin-top:16px">
+        <div class="section-label">逐题复盘</div>
+        <div style="display:flex;flex-direction:column;gap:10px">${itemsHtml}</div>
+      </div>
+    </div>`;
+}
+
+/* ---------- 启动 ---------- */
+function startInterview() {
+  state.idx = 0;
+  state.answers = [];
+  state.verdicts = [];
+  state.suggested = [];
+  renderQuestion();
+}
+
+renderSetup();
+</script>
+</body>
+</html>

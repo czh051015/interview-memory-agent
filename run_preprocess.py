@@ -15,7 +15,6 @@
 status=unknown、category=knowledge、source=public_jingyan，作为错题本冷启动补给池。
 """
 
-import io
 import logging
 import sys
 from pathlib import Path
@@ -32,9 +31,10 @@ if "--space" in sys.argv:
         _cfg.SPACE = sys.argv[_i + 1]
     del sys.argv[_i:_i + 2]
 
-# 真实终端/stdout 才包装；pytest 环境直接放行（包装会 GC 关闭原 stdout 缓冲，破坏 pytest 捕获）
-if hasattr(sys.stdout, "buffer") and "pytest" not in sys.modules:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",

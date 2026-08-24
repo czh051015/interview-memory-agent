@@ -171,9 +171,10 @@ export default function MockInterviewPage() {
     begin();
   }, [begin]);
 
-  // ── 简历/JD 状态（「简历深挖」章节的数据源）──
+  // ── 简历/JD 状态（「简历深挖」章节的数据源，按当前空间）──
   useEffect(() => {
-    fetchProfile()
+    const space = localStorage.getItem("offerloop.space") || "default";
+    fetchProfile(space)
       .then(setProfile)
       .catch(() => setProfile(null));
   }, []);
@@ -186,8 +187,9 @@ export default function MockInterviewPage() {
     setUploadMsg("");
     setError("");
     try {
-      const res = kind === "resume" ? await uploadResume(file) : await uploadJd(file);
-      setProfile(await fetchProfile());
+      const space = localStorage.getItem("offerloop.space") || "default";
+      const res = kind === "resume" ? await uploadResume(file, space) : await uploadJd(file, space);
+      setProfile(await fetchProfile(space));
       setUploadMsg(
         `${res.filename}：${res.chars} 字${res.pages ? ` / ${res.pages} 页` : ""}，已更新。下一场模拟面试将用新${
           kind === "resume" ? "简历" : "JD"

@@ -25,6 +25,7 @@ from datetime import datetime
 
 from src.memory import knowledge_store as store
 from src.memory.mastery import effective_mastery, _elapsed_days
+from src.memory import review_log
 from src.cleaner.schema import utcnow, ItemSource, ItemStatus
 from src.llm import chat_json
 from src.config import space_dir
@@ -150,20 +151,8 @@ def build_profile(space: str | None = None, *, save: bool = True) -> UserProfile
 
     # review_log 按 item_id 分组
     log_by_id: dict[str, list[dict]] = {}
-    try:
-        log_path = space_dir() / "review_log.jsonl"
-        if log_path.exists():
-            for line in log_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    ev = json.loads(line)
-                    log_by_id.setdefault(ev.get("item_id", ""), []).append(ev)
-                except json.JSONDecodeError:
-                    continue
-    except OSError:
-        pass
+    for ev in review_log.read():
+        log_by_id.setdefault(ev.get("item_id", ""), []).append(ev)
 
     # ── 题级计算：gap / 加权 fail / 趋势 ──
     topics: dict[str, dict] = {}   # topic → 聚合数据

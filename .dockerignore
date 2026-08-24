@@ -1,0 +1,25 @@
+# ── 不进构建上下文 / 镜像 ──
+.git
+.idea
+.vscode
+
+# 密钥（绝对不入镜像）
+.env
+
+# 本地数据（运行时挂载 volume，见 docker-compose.yml）
+data/
+
+# Python 缓存
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# 前端依赖与构建产物（node_modules 由 Stage 1 内 npm ci 生成；.next/out 由构建生成）
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# 测试与本地临时
+test_root.db
+*.sqlite3

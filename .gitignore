@@ -42,3 +42,11 @@ eval/标注反查-精简.md
 
 # 私下文档（面试讲解稿，不公开）
 docs/面试讲解稿-自己看.md
+
+# 个人面经数据 + 本地生成物
+data/seed/
+data/chroma_v2/
+data/chroma_fresh/
+data/*.sqlite3
+data/*.db
+test_root.db

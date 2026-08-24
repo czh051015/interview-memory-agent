@@ -42,6 +42,7 @@ class KnowledgeItem(BaseModel):
     role: str = Field(default="AI应用开发")
     round: str = Field(default="", description="技术一面/二面/HR面")
     date: str = Field(default="", description="面试日期 YYYY-MM-DD")
+    space: str = Field(default="default", description="空间标识（IA 全局空间切换），软概念按 metadata 过滤，默认 default")
     status: ItemStatus = ItemStatus.UNKNOWN
     history: list[dict] = Field(default_factory=list, description="状态变更证据链 [{time,from,to,reason,actor}]")
     user_note: str = Field(default="", description="用户原始备注")
@@ -54,10 +55,16 @@ class KnowledgeItem(BaseModel):
         description="行为特征标签（人级画像），如 ['表达绕弯','回避问题']，模拟面试结束统一写入",
     )
     created_at: datetime = Field(default_factory=utcnow)
-    _similarity: float = 0.0  # 内部使用，不入库
+    _similarity: float = 0.0  # 内部使用，不入库（下划线字段 pydantic 不序列化）
+    similarity: float = 0.0  # 语义检索相似度，API 展示用（search 端点从 _similarity 复制）
 
 
 # ── 拆解结果 ──
+def not_info(items):
+    """过滤信息性问题（自我介绍/薪酬/哪里人），只留知识类（ISSUES F2）。"""
+    return [it for it in items if it.category != ItemCategory.INFO]
+
+
 class DecomposeResult(BaseModel):
     """面经消化 Agent 的完整输出。"""
     company: str = ""

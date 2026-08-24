@@ -11,15 +11,15 @@ GET /api/dashboard?space=default →
 """
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime
 
 from fastapi import APIRouter, Query
 
-from src.cleaner.schema import ItemCategory, utcnow
+from src.cleaner.schema import utcnow, not_info
 from src.memory import knowledge_store as store
-from src.memory.mastery import rank, effective_mastery, _elapsed_days
+from src.memory.mastery import layer, effective_mastery, _elapsed_days
+from src.memory import review_log
 from src.config import space_dir
 
 router = APIRouter()
@@ -28,31 +28,20 @@ router = APIRouter()
 _BUCKETS = [(0, 1), (1, 3), (3, 7), (7, 14), (14, 30), (30, float("inf"))]
 _BUCKET_LABELS = ["今天", "1-3天", "3-7天", "7-14天", "14-30天", "30天+"]
 
-_RED_GAP = 0.5  # gap >= 0.5 快忘了
-_YELLOW_GAP = 0.2  # gap >= 0.2 该看看
-
-
-def _knowledge_only(items):
-    """过滤信息性问题（自我介绍/薪酬/哪里人），只留知识类（与 chat 一致）。"""
-    return [it for it in items if it.category != ItemCategory.INFO]
+def _entry(it, now: datetime) -> dict:
+    """提醒分层的展示字段（gap 由 layer 的阈值语义现算，展示时 round 到 3 位）。"""
+    return {
+        "id": it.id,
+        "question": it.question,
+        "topic": it.topic,
+        "days": int(_elapsed_days(it, now)),  # 未复习过按入库时间算（mastery 语义一致）
+        "gap": round(1.0 - effective_mastery(it, now), 3),
+    }
 
 
 def _recent_reviews(limit: int = 10) -> list[dict]:
     """读 review_log 尾部 limit 条（只 append 不分析的日志，Dashboard 只读）。"""
-    p = space_dir() / "review_log.jsonl"
-    if not p.exists():
-        return []
-    try:
-        lines = p.read_text(encoding="utf-8").strip().splitlines()
-    except OSError:
-        return []
-    entries = []
-    for line in lines[-limit:]:
-        try:
-            entries.append(json.loads(line))
-        except ValueError:
-            continue
-    return entries
+    return review_log.read(limit=limit)
 
 
 @router.get("/dashboard")
@@ -88,21 +77,10 @@ def dashboard(space: str = Query(default="default", description="记忆空间"))
             topic_count[it.topic] = topic_count.get(it.topic, 0) + 1
     hot_topics = sorted(topic_count.items(), key=lambda x: x[1], reverse=True)[:5]
 
-    # 提醒分层：rank 双因子排序后按 gap 分档（只对已判断状态的题）
-    red, yellow = [], []
-    for it in rank(judged, now=now):
-        gap = 1.0 - effective_mastery(it, now)
-        entry = {
-            "id": it.id,
-            "question": it.question,
-            "topic": it.topic,
-            "days": int(_elapsed_days(it, now)),  # 未复习过按入库时间算（mastery 语义一致）
-            "gap": round(gap, 3),
-        }
-        if gap >= _RED_GAP:
-            red.append(entry)
-        elif gap >= _YELLOW_GAP:
-            yellow.append(entry)
+    # 提醒分层：rank 排序 + gap 分档（只对已判断状态的题），再补展示字段
+    red_items, yellow_items, _ = layer(judged, now=now)
+    red = [_entry(it, now) for it in red_items]
+    yellow = [_entry(it, now) for it in yellow_items]
     green = len(judged) - len(red) - len(yellow)
 
     # 遗忘曲线：按距 anchor 天数分桶，桶内平均有效掌握度

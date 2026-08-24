@@ -29,7 +29,7 @@ except (AttributeError, ValueError, OSError):
     pass
 
 from src.memory import knowledge_store as store
-from src.memory.mastery import rank, effective_mastery, _elapsed_days
+from src.memory.mastery import layer, _elapsed_days
 from src.cleaner.schema import utcnow
 import src.config as _cfg  # noqa: E402  （SPACE：--space / OFFERLOOP_SPACE 切换）
 
@@ -118,10 +118,7 @@ def _notify_mode_rule() -> int:
     if not items:
         return 0
 
-    red = [
-        it for it in rank(items, now=now)
-        if (1.0 - effective_mastery(it, now)) >= 0.5
-    ]
+    red, _, _ = layer(items, now=now)
     if not red:
         return 0  # 没有快忘的题，静默
 
@@ -166,17 +163,7 @@ def main() -> int:
         print("先跑 run_interview.py 录复盘 / annotate_jingyan.py 标注错题。")
         return 0
 
-    ranked = rank(items, now=now)
-
-    red, yellow, green = [], [], []
-    for it in ranked:
-        gap = 1.0 - effective_mastery(it, now)
-        if gap >= 0.5:
-            red.append(it)
-        elif gap >= 0.2:
-            yellow.append(it)
-        else:
-            green.append(it)
+    red, yellow, green = layer(items, now=now)
 
     label = f"{company or '全部公司'}" + (f" · {role}" if role else "")
     print(f"\n📋 面试前提醒（{label}）")

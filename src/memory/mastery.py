@@ -48,6 +48,10 @@ INITIAL_MASTERY = {
     ItemStatus.UNKNOWN: 1.0,
 }
 
+# 遗忘分层阈值（与 status 权重同待遇：攒够数据后校准）：gap≥0.5 快忘了 / ≥0.2 该看看
+GAP_RED = 0.5
+GAP_YELLOW = 0.2
+
 
 def decay(mastery: float, days: float, *, lam: float = LAMBDA) -> float:
     """掌握度衰减：mastery × e^(-λ·days)。
@@ -152,3 +156,22 @@ def rank(
         setattr(item, "_recall_score", round(score, 4))
 
     return sorted(items, key=lambda it: -getattr(it, "_recall_score", 0.0))
+
+
+def layer(items: list[KnowledgeItem], *, now: datetime | None = None) -> tuple[list, list, list]:
+    """按掌握度缺口分遗忘层：(red, yellow, green)。
+
+    red = gap≥GAP_RED 快忘了 / yellow = gap≥GAP_YELLOW 该看看 / green = 其余。
+    每层内保持 rank 排序（越高优先越靠前）。只分类，不产出展示字段——调用方按需再算。
+    """
+    when = now or utcnow()
+    red, yellow, green = [], [], []
+    for it in rank(items, now=when):
+        gap = 1.0 - effective_mastery(it, when)
+        if gap >= GAP_RED:
+            red.append(it)
+        elif gap >= GAP_YELLOW:
+            yellow.append(it)
+        else:
+            green.append(it)
+    return red, yellow, green

@@ -1,6 +1,9 @@
 """错题本检索。"""
-import sys, io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
 from src.memory import knowledge_store as store
 
 args = sys.argv[1:]

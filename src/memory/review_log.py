@@ -3,7 +3,7 @@
 设计约定（与系统「衰减读时算」一致）：
 - 日志只记「复习事件点」(time, before, after)，不记衰减。
 - 两次复习之间的衰减，画图时用 mastery_score + 时间 现算 e^(-λt) 即可。
-- 只 append、不读不分析；将来 run_viz.py 从这里读轨迹。
+- 只 append；读取用 read()（dashboard/memory_keeper/profile/run_viz 共用）。
 - 日志失败不阻断主流程（写库/复习不能因为日志崩掉）。
 """
 from __future__ import annotations
@@ -39,3 +39,24 @@ def append(*, item_id: str, question: str, before: float, after: float,
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except OSError:
         pass
+
+
+def read(limit: int | None = None) -> list[dict]:
+    """读 review_log 尾部 limit 条（limit=None 读全部）。坏行跳过，文件不存在返回 []。"""
+    path = _log_path()
+    if not path.exists():
+        return []
+    entries: list[dict] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in (lines[-limit:] if limit else lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return entries

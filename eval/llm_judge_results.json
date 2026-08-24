@@ -1,0 +1,210 @@
+{
+  "sample": "agent_dev_interview.txt",
+  "decomposed_count": 27,
+  "category_accuracy": 1.0,
+  "topic_accuracy": 1.0,
+  "missed": [],
+  "extra": [],
+  "verdicts": [
+    {
+      "question": "简单讲讲Agent项目?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "短期记忆的具体实现方式是什么?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "什么叫\"快到上限了\"?对话是怎么逐步叠加的?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "如果对话轮次过多，你怎么去做优化?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "什么时候去触发这个总结动作?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "是每一轮对话都要去做总结吗?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "假设已进行 10轮并做了总结，第11轮开始时，总结怎么处理?是重算前11轮还是看加?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "如果前10轮都变成了总结，那之前的原始上下文就不需要了吗?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "长期记忆可以按需检索召回，具体在什么情况下需要检索?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "每轮对话都要注入记忆吗?长短期记忆是同时注入吗?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "如何减少工具过多带来的 Token 消耗?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "你的RAG是用什么技术实现的?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "何判断向量的相似度?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "除了余弦相似度，还了解其他相似度算法吗?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "听不懂，说人话?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "余弦相似度与欧几里得距离在工程应用中的具体区别是什么?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "项目中一共使用了几个模型?分别是什么?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "如何控制模型的幻觉问题?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "如何观察模型召回了哪些块的?",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "简历别的项目随便问了问主要工作。",
+      "category_correct": true,
+      "category_should": "info",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "算法题:Leetcode143.重排链表",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "你平时调试代码怎么调试的?",
+      "category_correct": true,
+      "category_should": "info",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "不对吧，最简单的方式不是打印一下吗，你把你写的代码打印一下不就能找一下哪个地方出问题了?",
+      "category_correct": true,
+      "category_should": "info",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "最近了解的AI内容?",
+      "category_correct": true,
+      "category_should": "info",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "讲一下 Claude Code 架构",
+      "category_correct": true,
+      "category_should": "knowledge",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "建议下去再补一点Harness的知识",
+      "category_correct": true,
+      "category_should": "info",
+      "topic_correct": true,
+      "issue": ""
+    },
+    {
+      "question": "反问业务",
+      "category_correct": true,
+      "category_should": "info",
+      "topic_correct": true,
+      "issue": ""
+    }
+  ],
+  "human_calibration": {
+    "reviewed": 4,
+    "category_corrections": {
+      "你平时调试代码怎么调试的?": "knowledge"
+    },
+    "not_a_question": [
+      "建议下去再补一点Harness的知识"
+    ]
+  },
+  "real_category_accuracy": 0.963,
+  "judge_missed": 2
+}

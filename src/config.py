@@ -19,9 +19,13 @@ SEED_DIR = DATA_DIR / "seed"
 SPACE = os.getenv("OFFERLOOP_SPACE", "default")
 
 
-def space_dir() -> Path:
-    """当前空间的数据目录（session/面试进度/复盘等临时文件）。"""
-    d = DATA_DIR / "spaces" / SPACE
+def space_dir(space: str | None = None) -> Path:
+    """当前空间的数据目录（session/面试进度/复盘等临时文件）。
+
+    传 space 则用指定值，不传则用全局 SPACE（向后兼容）。
+    """
+    name = space if space is not None else SPACE
+    d = DATA_DIR / "spaces" / name
     d.mkdir(parents=True, exist_ok=True)
     return d
 

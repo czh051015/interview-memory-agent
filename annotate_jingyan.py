@@ -14,7 +14,6 @@
 作为衰减起点（而不是导入时间，避免旧题被误衰减到 0）。
 """
 
-import io
 import logging
 import sys
 
@@ -23,9 +22,10 @@ from src.cleaner.annotate import annotate_unknown
 from src.memory import knowledge_store as store
 import src.config as _cfg  # noqa: E402
 
-# 真实终端/stdout 才包装；pytest 环境直接放行（包装会 GC 关闭原 stdout 缓冲，破坏 pytest 捕获）
-if hasattr(sys.stdout, "buffer") and "pytest" not in sys.modules:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",

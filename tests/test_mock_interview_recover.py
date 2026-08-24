@@ -109,3 +109,56 @@ def test_read_pdf_corrupt_returns_empty(tmp_path):
     bad.write_bytes(b"this is not a pdf")
     assert mi._read_pdf_text(bad) == ""
 
+
+# ── per-space 文档读取（空间隔离）──
+# 注意：mock 掉 space_dir 使其走 tmp_path，三个测试各自独立不污染
+
+def _with_space_dir_mock(tmp_path, monkeypatch):
+    """helper：让 space_dir 返回 tmp_path 下的 sp_{name}，避免写真实 data/ 目录。"""
+    def _fake_space_dir(space: str | None = None):
+        d = tmp_path / f"sp_{space or 'default'}"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    # 注意：run_mock_interview.py 用的是 from src.config import space_dir，
+    # 所以必须 patch mi.space_dir（模块的本地引用），而不是 src.config.space_dir
+    monkeypatch.setattr(mi, "space_dir", _fake_space_dir)
+    monkeypatch.setattr(mi, "DATA_DIR", tmp_path)
+
+def test_read_doc_fallback_to_global(tmp_path, monkeypatch):
+    """default 空间 per-space 不存在时回退到 data/ 根目录。"""
+    _with_space_dir_mock(tmp_path, monkeypatch)
+    (tmp_path / "resume.md").write_text("global", encoding="utf-8")
+    assert mi._read_doc("resume") == "global"  # space=None → fallback
+    assert mi._read_doc("resume", space="default") == "global"  # default → fallback
+
+
+def test_read_doc_nondefault_no_fallback(tmp_path, monkeypatch):
+    """非 default 空间没有 per-space 文件时返回空。"""
+    _with_space_dir_mock(tmp_path, monkeypatch)
+    (tmp_path / "resume.md").write_text("global", encoding="utf-8")
+    assert mi._read_doc("resume", space="test") == ""  # 非 default → 不 fallback
+
+
+def test_read_doc_per_space_preferred(tmp_path, monkeypatch):
+    """传 space 时优先读 per-space 目录。"""
+    _with_space_dir_mock(tmp_path, monkeypatch)
+    sp = tmp_path / "sp_test"
+    sp.mkdir(parents=True, exist_ok=True)
+    (sp / "resume.md").write_text("per-space", encoding="utf-8")
+    (tmp_path / "resume.md").write_text("global", encoding="utf-8")
+    assert mi._read_doc("resume", space="test") == "per-space"
+
+
+def test_read_profile_pass_through_space(tmp_path, monkeypatch):
+    """_read_profile(space=...) 透传 space 给 _read_doc。"""
+    _with_space_dir_mock(tmp_path, monkeypatch)
+    sp = tmp_path / "sp_test"
+    sp.mkdir(parents=True, exist_ok=True)
+    (sp / "resume.md").write_text("per-space", encoding="utf-8")
+    (sp / "jd.md").write_text("per-space jd", encoding="utf-8")
+    (tmp_path / "resume.md").write_text("global", encoding="utf-8")
+    (tmp_path / "jd.md").write_text("global jd", encoding="utf-8")
+    p = mi._read_profile(space="test")
+    assert p["resume"] == "per-space"
+    assert p["jd"] == "per-space jd"
+

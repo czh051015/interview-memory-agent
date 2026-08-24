@@ -5,8 +5,11 @@
   python run_interview.py --space 试玩   # 写入指定空间（默认 default）
   python run_interview.py 你的面经...   # 命令行直接贴复盘
 """
-import sys, io, logging
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import sys, logging
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
 from pathlib import Path

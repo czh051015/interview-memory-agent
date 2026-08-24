@@ -11,6 +11,7 @@ from src.memory.mastery import (
     review,
     review_fail,
     rank,
+    layer,
     _elapsed_days,
 )
 
@@ -181,6 +182,25 @@ class TestRank:
                                   reviewed_at=NOW - timedelta(days=8))
         ranked = rank([reviewed_fail, stale_partial], now=NOW)
         assert ranked[0].id == "b"
+
+
+class TestLayer:
+    """遗忘分层：gap≥0.5 红、≥0.2 黄、其余绿。"""
+
+    def test_tiers(self):
+        red = make_item(id="red", mastery=0.3, reviewed_at=NOW - timedelta(days=1))    # gap≈0.7 红
+        yellow = make_item(id="yel", mastery=0.6, reviewed_at=NOW - timedelta(days=1)) # gap≈0.4 黄
+        green = make_item(id="grn", mastery=0.9, reviewed_at=NOW - timedelta(days=1))  # gap≈0.1 绿
+        r, y, g = layer([green, yellow, red], now=NOW)
+        assert [it.id for it in r] == ["red"]
+        assert [it.id for it in y] == ["yel"]
+        assert [it.id for it in g] == ["grn"]
+
+    def test_each_tier_keeps_rank_order(self):
+        a = make_item(id="a", mastery=0.3, reviewed_at=NOW - timedelta(days=1))
+        b = make_item(id="b", mastery=0.4, reviewed_at=NOW - timedelta(days=1))
+        r, _, _ = layer([b, a], now=NOW)
+        assert [it.id for it in r] == ["a", "b"]  # gap 大的排前
 
 
 class TestEffectiveMastery:

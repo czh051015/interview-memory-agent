@@ -23,9 +23,10 @@ except Exception:
 
 from src.memory import knowledge_store as store
 from src.memory.mastery import (
-    effective_mastery, _elapsed_days, decay, LAMBDA, REVIEW_BOOST, INITIAL_MASTERY,
+    effective_mastery, _elapsed_days, decay, LAMBDA, REVIEW_BOOST, INITIAL_MASTERY, layer,
 )
-from src.cleaner.schema import utcnow, ItemCategory
+from src.cleaner.schema import utcnow, not_info
+from src.memory import review_log
 from src.config import DATA_DIR, space_dir
 import src.config as _cfg  # noqa: E402  （SPACE：OFFERLOOP_SPACE 环境变量切换）
 
@@ -35,23 +36,10 @@ OUT = VIZ_DIR / "report.html"
 
 # ── 数据提取 ──
 def _load_review_log() -> dict[str, list[dict]]:
-    """读 review_log.jsonl，按 item_id 分组（事件按时间升序）。文件不存在/为空返回 {}。"""
-    path = space_dir() / "review_log.jsonl"
-    if not path.exists():
-        return {}
+    """读 review_log，按 item_id 分组（事件按时间升序）。文件不存在/为空返回 {}。"""
     groups: dict[str, list[dict]] = {}
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                ev = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            groups.setdefault(ev.get("item_id", ""), []).append(ev)
-    except OSError:
-        return {}
+    for ev in review_log.read():
+        groups.setdefault(ev.get("item_id", ""), []).append(ev)
     for evs in groups.values():
         evs.sort(key=lambda e: e.get("time", ""))
     return groups
@@ -164,28 +152,28 @@ def collect(include_demo: bool = False) -> dict:
         + store.search(status="partial", space=_cfg.SPACE, top_k=1000)
     )
     # 信息性问题（自我介绍/薪酬期望/哪里人）不算「错题」，过滤掉（ISSUES F2 既定结论）
-    items = [it for it in items if it.category != ItemCategory.INFO]
+    items = not_info(items)
 
+    _TIER_META = {
+        "red": ("🔴 快忘了", "#e5484d"),
+        "yellow": ("🟡 该看看", "#f5a623"),
+        "green": ("✅ 刚看过", "#30a46c"),
+    }
     rows = []
-    for it in items:
-        em = effective_mastery(it, now)
-        gap = 1.0 - em
-        if gap >= 0.5:
-            tier, tier_label, color = "red", "🔴 快忘了", "#e5484d"
-        elif gap >= 0.2:
-            tier, tier_label, color = "yellow", "🟡 该看看", "#f5a623"
-        else:
-            tier, tier_label, color = "green", "✅ 刚看过", "#30a46c"
-        rows.append({
-            "question": it.question,
-            "status": it.status.value,
-            "mastery": round(em, 3),
-            "gap": round(gap, 3),
-            "tier": tier,
-            "tier_label": tier_label,
-            "color": color,
-            "days": int(_elapsed_days(it, now)),
-        })
+    for tier, tier_items in zip(_TIER_META, layer(items, now=now)):
+        tier_label, color = _TIER_META[tier]
+        for it in tier_items:
+            em = effective_mastery(it, now)
+            rows.append({
+                "question": it.question,
+                "status": it.status.value,
+                "mastery": round(em, 3),
+                "gap": round(1.0 - em, 3),
+                "tier": tier,
+                "tier_label": tier_label,
+                "color": color,
+                "days": int(_elapsed_days(it, now)),
+            })
     rows.sort(key=lambda r: -r["gap"])
 
     stats = store.get_stats(space=_cfg.SPACE)

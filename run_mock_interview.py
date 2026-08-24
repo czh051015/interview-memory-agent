@@ -87,8 +87,30 @@ def _read_pdf_text(path) -> str:
     return text
 
 
-def _read_doc(name: str) -> str:
-    """按 .pdf → .md → .txt 优先级读文档，命中一个非空就返回。"""
+def _read_doc(name: str, space: str | None = None) -> str:
+    """按 .pdf → .md → .txt 优先级读文档，命中一个非空就返回。
+
+    若传 space，优先从 data/spaces/{space}/ 读取。
+    非 default 空间不 fallback（新空间显示空）；default 空间 fallback 到 data/ 根目录（向后兼容）。
+    """
+    # 优先级 1：per-space 目录
+    if space is not None:
+        sp = space_dir(space)
+        for ext in (".pdf", ".md", ".txt"):
+            path = sp / f"{name}{ext}"
+            if not path.exists():
+                continue
+            try:
+                text = _read_pdf_text(path) if ext == ".pdf" else path.read_text(encoding="utf-8").strip()
+            except Exception as e:
+                logging.warning("读取 %s（space=%s）失败：%s", path.name, space, e)
+                continue
+            if text:
+                return text
+        # per-space 没有 → 非 default 空间直接返回空
+        if space != "default":
+            return ""
+    # 优先级 2：data/ 根目录（仅 default 空间/无 space 时）
     for ext in (".pdf", ".md", ".txt"):
         path = DATA_DIR / f"{name}{ext}"
         if not path.exists():
@@ -103,9 +125,12 @@ def _read_doc(name: str) -> str:
     return ""
 
 
-def _read_profile() -> dict:
-    """读简历和 JD。支持 .pdf / .md / .txt，优先 .pdf；缺失/失败返回空（对应章节跳过）。"""
-    return {"resume": _read_doc("resume"), "jd": _read_doc("jd")}
+def _read_profile(space: str | None = None) -> dict:
+    """读简历和 JD。支持 .pdf / .md / .txt，优先 .pdf；缺失/失败返回空（对应章节跳过）。
+
+    若传 space，优先从 data/spaces/{space}/ 读取，找不到则 fallback 到 data/ 根目录。
+    """
+    return {"resume": _read_doc("resume", space=space), "jd": _read_doc("jd", space=space)}
 
 
 # ══════════ 工具 3：LLM 生成章节化面试计划 ══════════
@@ -849,7 +874,7 @@ def main():
     print("OfferLoop 模拟面试 · 结构化面试官")
     print("=" * 60)
 
-    profile = _read_profile()
+    profile = _read_profile(space=_cfg.SPACE)
     weak_items = get_weak_questions()
 
     if not profile["resume"] and not profile["jd"] and not weak_items:

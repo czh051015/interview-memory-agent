@@ -4,11 +4,13 @@
 三个场景对应计划书 §3.5 验收 1~3，数字在下面 SCENARIO 里改。
 """
 
-import io
 import sys
 from datetime import datetime, timedelta
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
 
 from src.cleaner.schema import KnowledgeItem, ItemStatus
 from src.cleaner.annotate import annotate_unknown

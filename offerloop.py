@@ -13,9 +13,6 @@ import sys
 import re
 import json
 import logging
-import os
-from datetime import datetime
-from pathlib import Path
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -23,42 +20,13 @@ except (AttributeError, ValueError, OSError):
     pass
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
-from src.config import DATA_DIR, space_dir
+from src.config import space_dir
 from src.llm import chat_json
 from src.cleaner.decompose import decompose
 from src.cleaner.schema import ItemStatus, KnowledgeItem, utcnow
 from src.memory import knowledge_store as store
-from src.memory.mastery import rank, effective_mastery, _elapsed_days
+from src.memory.mastery import layer, _elapsed_days
 import run_mock_interview as mock
-
-# ── AgentOps 埋点（可选接入：设置 AGENTOPS_INGEST_URL 且 agentops 可导入时启用）──
-# 初始化放 main() 内（__main__ 保护）：避免 instrument 扫描「offerloop」模块时
-# 重新执行模块级代码导致重复初始化（__main__ vs offerloop 双模块问题）。
-_ao = None  # 接入成功 = (tracer, instrumentation)
-
-try:
-    from sdk.instrument import session_snapshot_hash  # 无 agentops 环境也可导入
-except ImportError:  # pragma: no cover
-    session_snapshot_hash = None
-
-
-def _init_ao() -> None:
-    """可选接入 AgentOps 埋点（幂等；失败仅告警，不阻塞主流程）。"""
-    global _ao
-    if _ao is not None or not os.getenv("AGENTOPS_INGEST_URL") or session_snapshot_hash is None:
-        return
-    try:
-        from sdk import init_offerloop
-
-        _ao = init_offerloop(
-            ingest_url=os.getenv("AGENTOPS_INGEST_URL"),
-            offerloop_root=str(Path(__file__).parent),
-            agent="offerloop",
-        )
-        if _ao:
-            logging.info("AgentOps 埋点已启用（ingest=%s）", os.getenv("AGENTOPS_INGEST_URL"))
-    except Exception as _e:
-        logging.warning("AgentOps 埋点未启用：%s", _e)
 
 # ── 意图路由 ──
 _ROUTER_PROMPT = (
@@ -445,13 +413,7 @@ def do_review_remind() -> None:
         print("错题本还是空的，先去记几道题。")
         return
 
-    red, yellow = [], []
-    for it in rank(items, now=now):
-        gap = 1.0 - effective_mastery(it, now)
-        if gap >= 0.5:
-            red.append(it)
-        elif gap >= 0.2:
-            yellow.append(it)
+    red, yellow, _ = layer(items, now=now)
 
     if not red and not yellow:
         print("都掌握得不错，暂时没有要复习的。")
@@ -527,8 +489,7 @@ _HELP = (
 def _dispatch(text: str) -> bool:
     """处理一条用户输入，返回是否继续循环（False = 退出）。
 
-    从 main() 循环体抽出：既保持主流程不变，又为 AgentOps 埋点提供
-    「一次任务 = 一个 trace」的边界（M1 接入）。
+    从 main() 循环体抽出：保持主流程可测（单条输入可独立调用）。
     """
     # 规则 fast-path 只拦「退出」，其余走 LLM 语义理解（含作用域/编号提取 + 上下文消歧）
     intent, filter_, mark = _fast_route(text)
@@ -561,7 +522,6 @@ def _dispatch(text: str) -> bool:
 
 
 def main() -> None:
-    _init_ao()  # AgentOps 可选接入（幂等）
     print("=" * 50)
     print("OfferLoop —— 记得你的面试错题本")
     print("=" * 50)
@@ -593,22 +553,8 @@ def main() -> None:
         if not text:
             continue
 
-        # AgentOps：一次任务 = 一个 trace（根 span 记录任务前记忆快照 hash，供 M4 重放恢复）
-        if _ao is not None:
-            tracer, _ = _ao
-            with tracer.trace("offerloop.task", memory_snapshot=session_snapshot_hash(space_dir())):
-                if not _dispatch(text):
-                    break
-        else:
-            if not _dispatch(text):
-                break
-
-    # AgentOps：退出前排空 exporter 缓冲（异步上报不丢根 span）
-    if _ao is not None:
-        try:
-            _ao[0].flush(timeout=3)
-        except Exception:
-            pass
+        if not _dispatch(text):
+            break
 
 
 if __name__ == "__main__":
