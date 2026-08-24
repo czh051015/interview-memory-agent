@@ -15,6 +15,17 @@
 
 - `实现说明/` —— `record-impl` skill 生成的代码实现说明，每阶段一份，给你看懂代码用。
 
-## 问题清单（在项目根目录）
+## 问题清单
 
-- `../ISSUES.md` —— 权威问题清单：Bug / 功能修复 / 增强 / 各阶段 issue，含已关闭与待校准项。
+- `ISSUES.md` —— 权威问题清单：Bug / 功能修复 / 增强 / 各阶段 issue，含已关闭与待校准项。
+
+## 模块设计
+
+- `architecture-spec.md` —— 架构全貌：各模块职责与调用关系。
+- `模拟面试最小闭环设计.md` —— 面试官 Agent 设计：结构化面试 + 追问 + 评估。
+- `MOCK-INTERVIEW-FRONTEND-DESIGN.md` —— 模拟面试前端设计。
+- `扩展点评审与疑点解答-2026-08-19.md` —— 架构扩展点评审与疑点解释。
+
+## 评估与标注
+
+- `eval/` —— 面试评估用例与标注规范（calibration-checklist / mock_interview_eval_report / upgrade-confirm / 标注反查 / 标注校对清单）。
