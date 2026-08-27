@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch
 
-import scripts.run_mock_interview as mi
+import src.mock as mi
 from src.cleaner.schema import KnowledgeItem, ItemStatus
 
 
@@ -220,7 +220,7 @@ class TestDynamicSession:
 
         seeds: {章节: [题dict]} 作为种子池；decide_next 被 mock 成按序返回 decisions。
         """
-        from scripts.run_mock_interview import run_dynamic_session
+        from src.mock import run_dynamic_session
         pool = {name: [dict(q) for q in qs] for name, qs in seeds.items()}
         order = list(seeds.keys())
         ai = iter(answers)
@@ -267,7 +267,7 @@ class TestDynamicSession:
 
     def test_max_total_questions_cap(self):
         """硬约束：整场题数不超 MAX_TOTAL_QUESTIONS。"""
-        from scripts.run_mock_interview import MAX_TOTAL_QUESTIONS
+        from src.mock import MAX_TOTAL_QUESTIONS
         # 无限 deep_dive，靠 generate 兜底出题，验证总数封顶
         seeds = {"技术验证": [{"question": "Q1", "source": "weak"}]}
         decisions = [{"action": "deep_dive", "guidance": "追", "reason": "差"} for _ in range(50)]
@@ -292,6 +292,35 @@ class TestDynamicSession:
         assert len(results) <= MAX_TOTAL_QUESTIONS
         # 单章节也受 MAX_SECTION_QUESTIONS 限制（deep_dive 到上限后强制推进章节）
         assert len(results) <= mi.MAX_SECTION_QUESTIONS or len(results) <= MAX_TOTAL_QUESTIONS
+
+    def test_deep_dive_uses_decide_next_guidance(self):
+        """deep_dive 时出题指引取 decide_next 的 guidance（而非硬编码串）。"""
+        # 需要 ≥2 章：单章时首题后自动 end，decide_next 不会被调
+        seeds = {
+            "技术验证": [{"question": "线程池", "source": "weak"}],
+            "行为面": [{"question": "STAR", "source": "behavior"}],
+        }
+        guidance = "请追问 TCP 三次握手为什么不是两次"
+        decisions = [
+            {"action": "deep_dive", "guidance": guidance, "reason": "答得差"},
+            {"action": "end", "guidance": "", "reason": "结束"},
+        ]
+        captured = {}
+
+        def fake_gen(section, g, resume, jd, weak_items, asked_before):
+            captured["guidance"] = g
+            return {"question": "动态深挖题", "source": "generic", "topic": "t"}
+
+        pool = {name: [dict(q) for q in qs] for name, qs in seeds.items()}
+
+        with patch.object(mi, "decide_next", side_effect=decisions), \
+             patch.object(mi, "interview_one", side_effect=lambda q, fn, a="", **kw: ("fail", "答", [{"reason": "r"}])), \
+             patch.object(mi, "generate_dynamic_question", side_effect=fake_gen):
+            mi.run_dynamic_session(
+                list(seeds.keys()), pool, "简历", "JD", [],
+                ask_fn=lambda _round: "答", on_save=lambda qs, rs: None,
+            )
+        assert captured["guidance"] == guidance  # 不再是硬编码"深挖上一题主题"
 
     def test_decide_next_parse(self):
         """decide_next 输出非法 action 时兜底 switch。"""
