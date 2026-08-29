@@ -360,7 +360,7 @@ offerloop/
 │       └── jingyan_preprocess.py # docx 面经预处理
 ├── scripts/                 # CLI 入口（记错题 / 模拟面试 / 提醒 / 复习 / 预处理）
 ├── tests/                   # 220 个单元测试（19 文件）
-├── eval/                    # 评估脚本（检索 / 判卷 / 出题质量）
+├── eval/                    # 评估脚本（评分 / 拆解 / 引导，申论域三套件）
 ├── frontend/                # Next.js 前端（静态导出）
 ├── data/                    # 本地存储（chroma/ · spaces/ · resume.md · jd.md）
 ├── pyproject.toml
@@ -391,8 +391,8 @@ offerloop/
 
 ## 性能与扩展性
 
-- **检索阈值经 eval 校准**：`eval/retrieval_eval.py` 用 20 条标注查询画 Recall@k + 阈值 PR 曲线，校准出相似度阈值（0.30~0.60）过滤噪音；向量查重 0.93 防重复入库。
-- **判卷质量可量化**：`eval/mock_interview_eval.py` 用 11 题 × 4 类人工定标答案做判别 eval，`discrimination=100%`、`no_fool=100%`（量规版对照金标准，不被自信错答骗）。
+- **评分传感器经 benchmark 验证**：`eval/score_eval.py` 用 36 道官方金标（河南 + 江苏）验证漏点识别，`no_fool=1.0`、`discrimination=0.899`（2026-08-29 实测）。
+- **拆解 / 引导质量可量化**：`eval/decompose_eval.py`（拆解 vs 官方金标对照 + 脏标答鲁棒性）、`eval/guidance_eval.py`（引导红线 no_spoiler / no_fabrication + 有用性）随 `scripts/run_evals.py` 统一回归，跑完即与 baseline 对比。
 - **断点保护**：面试进度落盘 `data/spaces/{space}/`，崩溃后 `--recover` 幂等补写，掌握度不重复涨。
 - **可扩展**：`space` 维度天然支持多用户；`src/market/` 可接更多数据源；记忆核与提醒已被封装为可独立调用的纯函数 + Agent，便于后续暴露成 MCP server。
 
@@ -414,7 +414,7 @@ offerloop/
 2. **主动性**：提醒是系统主动给的，不是用户想起来才查的——这才是 Agent 的灵魂。
 3. **结构化面试官**：不是错题抽查，是真面试；章节化 + 递进追问 + 复盘报告，诊断系统性毛病。
 4. **越用越懂你**：答差的新题自动采集，行为特征跨次累积。
-5. **可验证**：220 个单测覆盖记忆层全部纯函数（衰减边界、排序回流、状态机约束、幂等写回）；判卷 / 检索均有 eval 兜底。
+5. **可验证**：281 个单测覆盖记忆层全部纯函数（衰减边界、排序回流、状态机约束、幂等写回）；评分 / 拆解 / 引导三套件 eval 兜底（`scripts/run_evals.py` + baseline 回归对比）。
 6. **工程克制**：LLM 只做语义活，核心逻辑是纯函数、有类型、有单测——不是「Vibe Coding」式的黑盒。
 
 ---
@@ -440,8 +440,7 @@ python -m pytest tests/ -v
 python -m ruff check src/ tests/
 
 # 跑评估
-python eval/mock_interview_eval.py
-python eval/retrieval_eval.py
+python scripts/run_evals.py
 ```
 
 欢迎提 Issue / PR。核心模块（记忆引擎、判卷、出题）改动请同步更新 `docs/` 下的架构规格，并保证对应单测通过。
@@ -463,7 +462,7 @@ python eval/retrieval_eval.py
 面经冷启动补给（`source=public_jingyan`，只有题无自评）+ 模拟面试自动采集。Web 化冷启动是已知后续项。
 
 **Q5：怎么保证检索不召回垃圾？**
-`eval/retrieval_eval.py` 用 20 条标注查询画 Recall@k + 阈值 PR 曲线，校准相似度阈值（0.30~0.60）过滤噪音；向量查重 0.93 防重复入库。
+申论域的题目搜索是确定性过滤（角度/题型 + 关键词，`search_questions`），由 pytest 单测覆盖（`tests/test_shenlun_react.py`）；面试域的向量检索评测已随评估体系申论化下线（docs/19 §4.4）。
 
 **Q6：这是 Agent 还是普通应用？**
 记错题是 CRUD，但**动态遗忘分层 + 主动提醒 + 自适应三源模拟面试**是 Agent 内核。我们不把它包装成「全 AI」，而是讲清「哪部分必须 Agent、哪部分是工程」。

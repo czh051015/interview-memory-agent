@@ -1,6 +1,6 @@
 {
-  "run_id": "baseline",
-  "created_at": "2026-08-29T12:39:20",
+  "run_id": "20260829_112519",
+  "created_at": "20260829_112519",
   "labels": {
     "llm_calls": 79
   },
@@ -23,20 +23,20 @@
     "decompose": {
       "ok": true,
       "decomposed_count": 36,
-      "point_recall": 0.891,
-      "fabrication_rate": 0.056,
-      "structural_ok": 0.981,
+      "point_recall": 0.886,
+      "fabrication_rate": 0.074,
+      "structural_ok": 0.329,
       "score_deviation_mean": 0.006,
       "over_split_flags": [],
-      "dirty_robustness": 1.0,
+      "dirty_robustness": 0.0,
       "calibrated": false
     },
     "guidance": {
       "ok": true,
       "sample_count": 19,
-      "no_spoiler": 1.0,
+      "no_spoiler": 0.158,
       "no_fabrication": 1.0,
-      "hint_grounded": 1.0,
+      "hint_grounded": 0.684,
       "judge_score_mean": 5.0,
       "empty_guidance_count": 0
     }

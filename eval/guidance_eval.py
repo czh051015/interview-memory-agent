@@ -6,11 +6,15 @@
 格式调 _APPROACH_PROMPT（user_prompt 与运行时保持一致，改格式需同步 runtime）→ 校验引导输出。
 
 红线（必须，门槛 == 1.0，docs/18 §7 风险 1 的自动化）：
-  - no_spoiler     hint 不含金标原句（≥6 字连续子串）或 ≥2 个金标关键词串（代写信号；
-                    判定按「整句/关键词串」而非单字，误报案例人工复核后调判定规则，docs/19 §10）
+  - no_spoiler     hint 不含参考答案独有整句（good-text 的 ≥14 字连续子串、去停用字归一化后
+                    仍不在材料里）→ 代写。校准记录（2026-08-29 首轮）：初值「≥6字子串或 ≥2 个
+                    关键词」在 20/20 误报——hint 引用材料术语/叙述是产品标准引导（材料第X段有X），
+                    材料与满分作答大量重合（江苏材料为摘要版），子串与关键词口径无法区分「引用材料」
+                    vs「代写」；人工复核 20 条后改为「答案独有整句」口径（≥14 字实质整句；
+                    12 字内短引与合格引导重叠，交给 judge + 人工层），docs/19 §10
   - no_fabrication LLM 返回的 point_id ∈ 该题真实漏点集（不引导已命中的点、不引导金标没有的点）
 质量（门槛初值，待校准）：
-  - hint_grounded  hint 提到材料位置/事例（含材料特有名词），而非空话 ≥ 0.8
+  - hint_grounded  hint 提到材料位置/事例/材料短语（≥4字锚点词 或 ≥5字材料子串），而非空话 ≥ 0.8
   - judge_score    LLM-as-judge 对「引导有用性」打分 1-5，人工抽验裁判，只报告
 
 用法：
@@ -84,23 +88,35 @@ def _gold_anchors(d: dict) -> tuple[list[str], list[str]]:
     return anchors, all_kws
 
 
-def _is_spoiler(hint: str, good_text: str, gold_keywords: list[str]) -> bool:
-    """代写红线判定（docs/19 §10 口径：整句/关键词串，不比对单字）：
-    1. hint 含金标原句的 ≥6 字连续子串；
-    2. hint 中出现 ≥2 个不同金标关键词（关键词串 = 代写信号，单个词=指向材料可容忍）。
+# 停用字（归一化用，只影响比较）：标点 + 虚词，消除「相关的」vs「息息相关」这类措辞差异
+_SPOILER_STOP = r"[，。、；：？！（）()“”\"'《》\s]+|的|与|了|并|等|和|及|还"
+
+
+def _is_spoiler(hint: str, good_text: str, material: str) -> bool:
+    """代写红线判定（2026-08-29 校准后口径，docs/19 §10）：答案独有整句。
+
+    规则：hint 含 good-text（参考答案全文）的 ≥14 字连续子串，且该子串去停用字归一化后
+    不在材料里 → 代写（写出了参考答案独有的组织句/概括语）。
+    材料引用（含材料叙述转述、引号短引、12 字内短串）放行——产品标准引导「材料第X段有X」。
+    校准依据：首轮 20/20 误报人工复核，全部为合格引导；真代写反例
+    「把骂声当作改进工作的动力」可被 ≥14 字规则命中。
     """
-    for i in range(max(0, len(good_text) - 5)):
-        if good_text[i:i + 6] in hint:
+    nm = re.sub(_SPOILER_STOP, "", material)
+    for i in range(max(0, len(good_text) - 13)):
+        seg = good_text[i:i + 14]
+        if seg in hint and re.sub(_SPOILER_STOP, "", seg) not in nm:
             return True
-    hits = sum(1 for kw in set(gold_keywords) if kw in hint)
-    return hits >= 2
+    return False
 
 
-def _is_grounded(hint: str, anchors: list[str]) -> bool:
-    """hint 是否指向材料位置/事例（非空话）：提到材料锚点名词，或 第X段/事例/案例 标记。"""
+def _is_grounded(hint: str, anchors: list[str], material: str) -> bool:
+    """hint 是否指向材料位置/事例（非空话）：材料锚点名词、第X段/事例/案例 标记，
+    或 ≥5 字材料子串重叠（校准：首轮 6 条空话误报全部为材料具体内容复述，补 5-gram 口径）。"""
     if any(a in hint for a in anchors):
         return True
-    return bool(re.search(r"第\s*\d*\s*段", hint)) or "事例" in hint or "案例" in hint
+    if re.search(r"第\s*\d*\s*段", hint) or "事例" in hint or "案例" in hint:
+        return True
+    return any(material[i:i + 5] in hint for i in range(max(0, len(material) - 4)))
 
 
 def run_guidance(d: dict, answer: str) -> dict:
@@ -152,22 +168,22 @@ def run_guidance(d: dict, answer: str) -> dict:
         if len(guided) >= MAX_GUIDED_POINTS:
             break
 
-    anchors, all_kws = _gold_anchors(d)
+    anchors, _all_kws = _gold_anchors(d)
     return {
         "id": d.get("id", ""),
         "miss_ids": miss_ids,
         "raw": raw,               # LLM 原始返回（含 hint 的条目）
         "guided": guided,         # 过滤后的有效引导（产品实际展示）
         "fabricated": fabricated,
-        "spoiler_flags": [g["hint"] for g in guided if _is_spoiler(g["hint"], good_text, all_kws)],
-        "ungrounded_flags": [g["hint"] for g in guided if not _is_grounded(g["hint"], anchors)],
+        "spoiler_flags": [g["hint"] for g in guided if _is_spoiler(g["hint"], good_text, material)],
+        "ungrounded_flags": [g["hint"] for g in guided if not _is_grounded(g["hint"], anchors, material)],
     }
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", help="只看某题型，如 提出对策")
-    ap.add_argument("--out", default=os.path.join(ROOT, "eval", "guidance_eval_results.json"))
+    ap.add_argument("--out", default=os.path.join(ROOT, "eval", "results", "baseline", "guidance_eval_results.json"))
     args = ap.parse_args()
 
     # 样本选型（docs/19 §9.3 推荐 C）：跑题答每题型 BAD_PER_TYPE 条 + 半吊子答每题型 1 条

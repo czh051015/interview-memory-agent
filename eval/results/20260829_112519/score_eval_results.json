@@ -1,17 +1,16 @@
 {
-  "summary": {
-    "n_questions": 36,
-    "mean_discrimination": 0.899,
-    "no_fool": 1.0,
-    "good_leak_count": 1,
-    "bad_fooled_ids": [],
-    "per_type_discrimination": {
-      "应用文": 0.788,
-      "综合分析": 0.951,
-      "归纳概括": 0.929,
-      "提出对策": 1.0
-    }
+  "data_count": 36,
+  "n_points": 213,
+  "mean_discrimination": 0.899,
+  "no_fool": 1.0,
+  "per_type": {
+    "应用文": 0.788,
+    "综合分析": 0.951,
+    "归纳概括": 0.929,
+    "提出对策": 1.0
   },
+  "good_leak_count": 1,
+  "bad_fooled_ids": [],
   "rows": [
     {
       "id": "henan_2024_city_1",

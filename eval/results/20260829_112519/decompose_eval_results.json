@@ -1,0 +1,2679 @@
+{
+  "summary": {
+    "decomposed_count": 36,
+    "point_recall": 0.886,
+    "fabrication_rate": 0.074,
+    "structural_ok": 0.329,
+    "score_deviation": {
+      "mean": 0.006,
+      "max": 0.2
+    },
+    "over_split_flags": [],
+    "dirty_robustness": 0.0,
+    "calibrated": false,
+    "llm_calls": 52,
+    "judge": {
+      "sample_count": 10,
+      "findings": {
+        "fabricated": [
+          "henan_2025_county_4: 长鲜·良性循环(走出去/引回来/良性循环)"
+        ],
+        "missed": [
+          "henan_2025_county_4: 标题(尝鲜/长鲜)",
+          "henan_2025_county_4: 总论(传统作坊/现代产业/关键)",
+          "henan_2025_county_4: 总结升华(标准立基/品牌聚力/生态延链/历久弥新)"
+        ],
+        "extra": [
+          "henan_2025_county_4: 长鲜·良性循环(走出去/引回来/良性循环)"
+        ]
+      }
+    },
+    "human_calibration": {
+      "reviewed": 0,
+      "category_corrections": {},
+      "judge_missed_notes": []
+    },
+    "thresholds": {
+      "point_recall": 0.8,
+      "fabrication": 0.1,
+      "structural": 1.0,
+      "dirty_robustness": 1.0
+    }
+  },
+  "rows": [
+    {
+      "id": "henan_2024_city_1",
+      "type": "应用文",
+      "n_gold": 8,
+      "n_decomposed": 6,
+      "point_recall": 0.75,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「网办服务不落地」关键词「网办名不符实」不出自原文/材料",
+        "「助企服务不精准」关键词「政策倾向大企业」不出自原文/材料",
+        "「信息公开不规范」关键词「电话短信轰炸」不出自原文/材料",
+        "「信息公开不规范」关键词「影响正常运营」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "线上服务不便民",
+          "keywords": [
+            "强制网办",
+            "缺乏指导",
+            "老年人",
+            "操作困难",
+            "推荐有偿代办"
+          ]
+        },
+        {
+          "point": "咨询渠道不畅通",
+          "keywords": [
+            "电话空号",
+            "无人接听",
+            "咨询难",
+            "回应迟缓"
+          ]
+        },
+        {
+          "point": "网办服务不落地",
+          "keywords": [
+            "系统不兼容",
+            "便民措施",
+            "跑腿",
+            "网办名不符实"
+          ]
+        },
+        {
+          "point": "助企服务不精准",
+          "keywords": [
+            "助企专员覆盖不足",
+            "政策倾向大企业",
+            "中小微企业",
+            "补贴发放迟缓"
+          ]
+        },
+        {
+          "point": "信息公开不规范",
+          "keywords": [
+            "法人信息泄露",
+            "电话短信轰炸",
+            "影响正常运营"
+          ]
+        },
+        {
+          "point": "建议对策",
+          "keywords": [
+            "优化服务流程",
+            "畅通咨询渠道",
+            "推动系统整合",
+            "增强政策普惠性",
+            "加强信息保护"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2024_city_2",
+      "type": "综合分析",
+      "n_gold": 5,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「机制·协同联动」关键词「打破壁垒」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "理念·增值化",
+          "keywords": [
+            "增值化",
+            "便利化",
+            "衍生服务"
+          ]
+        },
+        {
+          "point": "方式·主动匹配",
+          "keywords": [
+            "主动匹配",
+            "智能分析",
+            "政策找企业"
+          ]
+        },
+        {
+          "point": "内容·集成生态",
+          "keywords": [
+            "集成生态",
+            "全产业链",
+            "全生命周期"
+          ]
+        },
+        {
+          "point": "对象·精准滴灌",
+          "keywords": [
+            "精准滴灌",
+            "差异化",
+            "定制化"
+          ]
+        },
+        {
+          "point": "机制·协同联动",
+          "keywords": [
+            "协同联动",
+            "一站式",
+            "打破壁垒"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2024_city_3",
+      "type": "应用文",
+      "n_gold": 10,
+      "n_decomposed": 12,
+      "point_recall": 0.7,
+      "fabrication_rate": 0.083,
+      "structural_ok": false,
+      "structural_problems": [
+        "「推动标准互认」关键词「减轻负担」不出自原文/材料",
+        "「扶持中小企业」关键词「避免一刀切」不出自原文/材料"
+      ],
+      "score_deviation": 0.2,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "政策知晓度低",
+          "keywords": [
+            "知晓度低",
+            "宣传不到位",
+            "政策红利"
+          ]
+        },
+        {
+          "point": "跨省认定不统一",
+          "keywords": [
+            "认定标准不统一",
+            "标识各异",
+            "重复申报"
+          ]
+        },
+        {
+          "point": "内销环境乱象",
+          "keywords": [
+            "仿冒",
+            "拖欠货款",
+            "不正当竞争"
+          ]
+        },
+        {
+          "point": "中小企业受挤压",
+          "keywords": [
+            "扶优扶强",
+            "保大汰小",
+            "中小企业"
+          ]
+        },
+        {
+          "point": "部门协调难",
+          "keywords": [
+            "部门多",
+            "协调难",
+            "分身乏术"
+          ]
+        },
+        {
+          "point": "知识产权保护不足",
+          "keywords": [
+            "知识产权",
+            "仿冒",
+            "保护机制"
+          ]
+        },
+        {
+          "point": "加强政策宣传",
+          "keywords": [
+            "宣传",
+            "精准推送",
+            "应知尽知"
+          ]
+        },
+        {
+          "point": "推动标准互认",
+          "keywords": [
+            "跨省互认",
+            "统一标识",
+            "减轻负担"
+          ]
+        },
+        {
+          "point": "优化内销环境",
+          "keywords": [
+            "知识产权保护",
+            "快速维权",
+            "公平竞争"
+          ]
+        },
+        {
+          "point": "扶持中小企业",
+          "keywords": [
+            "梯度培育",
+            "避免一刀切",
+            "中小企业"
+          ]
+        },
+        {
+          "point": "推进部门协同",
+          "keywords": [
+            "一窗受理",
+            "一网通办",
+            "部门协同"
+          ]
+        },
+        {
+          "point": "建立风险预警",
+          "keywords": [
+            "风险预警",
+            "纠纷调解",
+            "公平竞争"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_city_1",
+      "type": "归纳概括",
+      "n_gold": 9,
+      "n_decomposed": 9,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「产业协同」keywords 数量 6 不在 1-5",
+        "「产业协同」关键词「面膜供应链」不出自原文/材料",
+        "「民生联动」关键词「找零工App」不出自原文/材料",
+        "「经济共进」关键词「差距缩小」不出自原文/材料",
+        "「产业升级」关键词「产业结构优化」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "设施互通",
+          "keywords": [
+            "城际公交",
+            "高速免费互通",
+            "新建提升改造3条道路"
+          ]
+        },
+        {
+          "point": "产业协同",
+          "keywords": [
+            "新兴产业带动",
+            "新能源",
+            "装备制造",
+            "光伏光电",
+            "物流枢纽",
+            "面膜供应链"
+          ]
+        },
+        {
+          "point": "服务共享",
+          "keywords": [
+            "医疗",
+            "文旅",
+            "美食文创街区",
+            "旅游营销"
+          ]
+        },
+        {
+          "point": "人才共育",
+          "keywords": [
+            "人才协同发展战略协议",
+            "年轻干部互派挂职"
+          ]
+        },
+        {
+          "point": "民生联动",
+          "keywords": [
+            "找零工App",
+            "灵活就业",
+            "置业生活"
+          ]
+        },
+        {
+          "point": "经济共进",
+          "keywords": [
+            "GDP增幅31%",
+            "制造业投资增速全市第一",
+            "差距缩小"
+          ]
+        },
+        {
+          "point": "产业升级",
+          "keywords": [
+            "二三产业协同驱动",
+            "产业结构优化"
+          ]
+        },
+        {
+          "point": "民生提质",
+          "keywords": [
+            "跨区就医",
+            "消费",
+            "就业",
+            "幸福感"
+          ]
+        },
+        {
+          "point": "格局初成",
+          "keywords": [
+            "1+1>2",
+            "区域发展格局"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_city_2",
+      "type": "应用文",
+      "n_gold": 11,
+      "n_decomposed": 7,
+      "point_recall": 0.727,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「正视问题·转变观念」长度 9 > 8 字",
+        "「内生项目·新质生产力」长度 10 > 8 字"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "正视问题·转变观念",
+          "keywords": [
+            "重外轻内",
+            "好大忽小",
+            "内外并重",
+            "激发内生动力"
+          ]
+        },
+        {
+          "point": "强化政策引导",
+          "keywords": [
+            "K县",
+            "专项政策",
+            "技改补助",
+            "提高"
+          ]
+        },
+        {
+          "point": "数据赋能决策",
+          "keywords": [
+            "L县",
+            "数据360",
+            "预评审机制",
+            "精准配置"
+          ]
+        },
+        {
+          "point": "激活存量投资",
+          "keywords": [
+            "M县",
+            "设备更新",
+            "一站式平台",
+            "技改需求"
+          ]
+        },
+        {
+          "point": "推动产业升级",
+          "keywords": [
+            "J县",
+            "智能装备",
+            "产业链",
+            "集群"
+          ]
+        },
+        {
+          "point": "培育本土生态",
+          "keywords": [
+            "S县",
+            "内生裂变",
+            "上下游集群",
+            "留住项目"
+          ]
+        },
+        {
+          "point": "内生项目·新质生产力",
+          "keywords": [
+            "内生项目",
+            "新质生产力",
+            "重要载体"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_city_3",
+      "type": "综合分析",
+      "n_gold": 6,
+      "n_decomposed": 4,
+      "point_recall": 0.833,
+      "fabrication_rate": 0.0,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "消费升级",
+          "keywords": [
+            "消费升级",
+            "互动体验",
+            "情感",
+            "社交",
+            "疗愈"
+          ]
+        },
+        {
+          "point": "文化塑造",
+          "keywords": [
+            "文化表达",
+            "文化景观",
+            "城市特色",
+            "吸引力"
+          ]
+        },
+        {
+          "point": "经济激活",
+          "keywords": [
+            "小微创作者",
+            "创业平台",
+            "就业",
+            "商圈人气"
+          ]
+        },
+        {
+          "point": "持续发展",
+          "keywords": [
+            "持续",
+            "品牌化",
+            "差异化",
+            "同质复制",
+            "城市肌理"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_county_1",
+      "type": "归纳概括",
+      "n_gold": 5,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "快速响应机制",
+          "keywords": [
+            "群众点单",
+            "平台派单",
+            "部门接单",
+            "基层智治平台",
+            "路灯"
+          ]
+        },
+        {
+          "point": "智能监管系统",
+          "keywords": [
+            "智能前端监控",
+            "视频AI算法",
+            "一屏掌控",
+            "违停"
+          ]
+        },
+        {
+          "point": "临时果蔬市场",
+          "keywords": [
+            "临时果蔬市场",
+            "三摆三不摆",
+            "疏堵结合",
+            "规范"
+          ]
+        },
+        {
+          "point": "社区集市打造",
+          "keywords": [
+            "社区集市",
+            "议事协商",
+            "服务费",
+            "统一管理"
+          ]
+        },
+        {
+          "point": "直播提升流量",
+          "keywords": [
+            "大学生志愿者",
+            "直播",
+            "流量",
+            "打卡"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_county_2",
+      "type": "应用文",
+      "n_gold": 12,
+      "n_decomposed": 7,
+      "point_recall": 0.75,
+      "fabrication_rate": 0.0,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "设施老化失修",
+          "keywords": [
+            "老化失修",
+            "废弃",
+            "排水功能弱化",
+            "内涝"
+          ]
+        },
+        {
+          "point": "管理职责不清",
+          "keywords": [
+            "职能调整",
+            "事权分离",
+            "基础信息缺失",
+            "维护缺位"
+          ]
+        },
+        {
+          "point": "资金投入不足",
+          "keywords": [
+            "资金",
+            "专项经费",
+            "乡镇财政紧张"
+          ]
+        },
+        {
+          "point": "产权归属模糊",
+          "keywords": [
+            "产权归属",
+            "历史遗留",
+            "开发利用"
+          ]
+        },
+        {
+          "point": "使用意识淡薄",
+          "keywords": [
+            "意识淡薄",
+            "填沟种地",
+            "忽视"
+          ]
+        },
+        {
+          "point": "原因分析",
+          "keywords": [
+            "农业转型",
+            "机构改革",
+            "重建轻管",
+            "内生动力"
+          ]
+        },
+        {
+          "point": "对策建议",
+          "keywords": [
+            "全面普查",
+            "管护责任",
+            "多元筹资",
+            "规划引领",
+            "宣传引导"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_county_3",
+      "type": "综合分析",
+      "n_gold": 7,
+      "n_decomposed": 6,
+      "point_recall": 0.857,
+      "fabrication_rate": 0.167,
+      "structural_ok": false,
+      "structural_problems": [
+        "「过程陪伴·能力培养」长度 9 > 8 字",
+        "「服务供给·情感联结」长度 9 > 8 字",
+        "「未来潜力·长期回报」长度 9 > 8 字",
+        "「错位发展·前端投入」长度 9 > 8 字",
+        "「错位发展·前端投入」关键词「积蓄青年」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "种树·培育人才",
+          "keywords": [
+            "种树",
+            "培育",
+            "人才",
+            "早期"
+          ]
+        },
+        {
+          "point": "摘果·现成人才",
+          "keywords": [
+            "摘果",
+            "成熟人才",
+            "立竿见影"
+          ]
+        },
+        {
+          "point": "过程陪伴·能力培养",
+          "keywords": [
+            "生产一线",
+            "流程",
+            "磨合方案",
+            "毕业设计"
+          ]
+        },
+        {
+          "point": "服务供给·情感联结",
+          "keywords": [
+            "服务",
+            "吃住行",
+            "归属感",
+            "认同感"
+          ]
+        },
+        {
+          "point": "未来潜力·长期回报",
+          "keywords": [
+            "未来",
+            "长期",
+            "潜力",
+            "回报"
+          ]
+        },
+        {
+          "point": "错位发展·前端投入",
+          "keywords": [
+            "错位发展",
+            "前端",
+            "资源有限",
+            "积蓄青年"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_county_4",
+      "type": "应用文",
+      "n_gold": 6,
+      "n_decomposed": 7,
+      "point_recall": 0.667,
+      "fabrication_rate": 0.143,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "尝鲜·敢于突破",
+          "keywords": [
+            "尝鲜",
+            "敢于突破",
+            "成立行业协会",
+            "组织化",
+            "标准化生产"
+          ]
+        },
+        {
+          "point": "尝鲜·劳务品牌",
+          "keywords": [
+            "三江面工",
+            "劳务品牌",
+            "拓展全国市场"
+          ]
+        },
+        {
+          "point": "尝鲜·龙头企业",
+          "keywords": [
+            "龙头企业",
+            "产业链集群",
+            "引入"
+          ]
+        },
+        {
+          "point": "长鲜·团体标准",
+          "keywords": [
+            "三江鲜面",
+            "团体标准",
+            "品质统一"
+          ]
+        },
+        {
+          "point": "长鲜·传承授艺",
+          "keywords": [
+            "传习所",
+            "职教培训",
+            "技能人才",
+            "传承"
+          ]
+        },
+        {
+          "point": "长鲜·业态融合",
+          "keywords": [
+            "面食+",
+            "业态融合",
+            "地标城市"
+          ]
+        },
+        {
+          "point": "长鲜·良性循环",
+          "keywords": [
+            "走出去",
+            "引回来",
+            "良性循环"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "henan_2025_county_5",
+      "type": "归纳概括",
+      "n_gold": 6,
+      "n_decomposed": 5,
+      "point_recall": 0.833,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「空间整合与灵活建设」长度 9 > 8 字",
+        "「空间整合与灵活建设」关键词「统筹存量」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "空间整合与灵活建设",
+          "keywords": [
+            "统筹存量",
+            "拆除重建",
+            "跨区租赁",
+            "综合体为主",
+            "插花式为辅"
+          ]
+        },
+        {
+          "point": "问需于民精准嵌入",
+          "keywords": [
+            "网络调查",
+            "按需精准嵌入",
+            "一老一小",
+            "新需求",
+            "相亲角"
+          ]
+        },
+        {
+          "point": "多元合作运营机制",
+          "keywords": [
+            "政府购买",
+            "大物业",
+            "强社公司",
+            "市场化力量",
+            "专业运营"
+          ]
+        },
+        {
+          "point": "政策创新破除障碍",
+          "keywords": [
+            "混合用地",
+            "功能变更",
+            "审批标准",
+            "制度保障"
+          ]
+        },
+        {
+          "point": "规模运营平衡微利",
+          "keywords": [
+            "打包竞标",
+            "规模化",
+            "降低运营成本",
+            "普惠",
+            "可持续"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2019_b_1",
+      "type": "综合分析",
+      "n_gold": 3,
+      "n_decomposed": 3,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「听取骂声·改进工作」长度 9 > 8 字",
+        "「听取骂声·改进工作」关键词「听取骂声」不出自原文/材料",
+        "「提升能力·以人为本」长度 9 > 8 字",
+        "「提升能力·以人为本」keywords 数量 9 不在 1-5",
+        "「革新发展·满足需求」长度 9 > 8 字",
+        "「革新发展·满足需求」keywords 数量 7 不在 1-5",
+        "「革新发展·满足需求」关键词「满足需求」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "听取骂声·改进工作",
+          "keywords": [
+            "听取骂声",
+            "群众意见",
+            "反思",
+            "改进工作",
+            "动力"
+          ]
+        },
+        {
+          "point": "提升能力·以人为本",
+          "keywords": [
+            "思想觉悟",
+            "执法能力",
+            "以人为本",
+            "不怕难",
+            "不怕烦",
+            "不怕累",
+            "责任心",
+            "换位思考",
+            "沟通"
+          ]
+        },
+        {
+          "point": "革新发展·满足需求",
+          "keywords": [
+            "革新",
+            "发展",
+            "满足需求",
+            "时代潮流",
+            "深入基层",
+            "专业人才",
+            "动员群众"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2019_b_2",
+      "type": "归纳概括",
+      "n_gold": 4,
+      "n_decomposed": 4,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "加大财政投入",
+          "keywords": [
+            "财政专项资金",
+            "投入",
+            "覆盖"
+          ]
+        },
+        {
+          "point": "规范厨师队伍",
+          "keywords": [
+            "一照两证",
+            "操作规范",
+            "记分评价",
+            "红灰黑榜"
+          ]
+        },
+        {
+          "point": "智慧化监管",
+          "keywords": [
+            "摄像头",
+            "监控",
+            "无线WiFi",
+            "实时查看"
+          ]
+        },
+        {
+          "point": "维护消费者权益",
+          "keywords": [
+            "先行赔付",
+            "小额餐饮纠纷",
+            "退还"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2019_b_3",
+      "type": "应用文",
+      "n_gold": 8,
+      "n_decomposed": 7,
+      "point_recall": 0.625,
+      "fabrication_rate": 0.286,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "肯定白师傅善举",
+          "keywords": [
+            "无私奉献",
+            "高尚品质",
+            "赞扬"
+          ]
+        },
+        {
+          "point": "解释安全隐患",
+          "keywords": [
+            "路面较陡",
+            "安全事故",
+            "擅自施工"
+          ]
+        },
+        {
+          "point": "说明道路性质",
+          "keywords": [
+            "未纳入政府统一规划",
+            "不正规道路",
+            "居民开设"
+          ]
+        },
+        {
+          "point": "说明手续规定",
+          "keywords": [
+            "办理相关手续",
+            "打地基铺路",
+            "增高护栏",
+            "不符合规定"
+          ]
+        },
+        {
+          "point": "承诺后续处理",
+          "keywords": [
+            "妥善处理",
+            "手续审批",
+            "尽力修缮道路"
+          ]
+        },
+        {
+          "point": "表达改进态度",
+          "keywords": [
+            "倾听群众意见",
+            "灵活办事",
+            "柔性执法"
+          ]
+        },
+        {
+          "point": "呼吁理解共建",
+          "keywords": [
+            "理解",
+            "共建美好家园"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2022_b_1",
+      "type": "归纳概括",
+      "n_gold": 3,
+      "n_decomposed": 6,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.167,
+      "structural_ok": false,
+      "structural_problems": [
+        "「执法开放·群众参与」长度 9 > 8 字",
+        "「导师帮带·队伍成长」长度 9 > 8 字",
+        "「驻队律师·释法说理」长度 9 > 8 字",
+        "「环保医生·专业指导」长度 9 > 8 字",
+        "「多措并举·减少违法」长度 9 > 8 字",
+        "「科技执法·填补盲区」长度 9 > 8 字"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "执法开放·群众参与",
+          "keywords": [
+            "开放日",
+            "参与",
+            "理解",
+            "法律意识",
+            "反馈"
+          ]
+        },
+        {
+          "point": "导师帮带·队伍成长",
+          "keywords": [
+            "导师帮带制",
+            "青蓝工程",
+            "成长",
+            "人性执法"
+          ]
+        },
+        {
+          "point": "驻队律师·释法说理",
+          "keywords": [
+            "驻队律师",
+            "释法说理",
+            "消除阻碍",
+            "高效执法"
+          ]
+        },
+        {
+          "point": "环保医生·专业指导",
+          "keywords": [
+            "环保医生",
+            "专业参考",
+            "精准整改"
+          ]
+        },
+        {
+          "point": "多措并举·减少违法",
+          "keywords": [
+            "查处",
+            "虚假宣传",
+            "多措并举",
+            "减少违法"
+          ]
+        },
+        {
+          "point": "科技执法·填补盲区",
+          "keywords": [
+            "无人机",
+            "填补盲区",
+            "倒逼自觉",
+            "节省人力"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2022_b_2",
+      "type": "综合分析",
+      "n_gold": 4,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "法理情理冲突",
+          "keywords": [
+            "法理",
+            "情理",
+            "冲突",
+            "割裂"
+          ]
+        },
+        {
+          "point": "执法权限之争",
+          "keywords": [
+            "个人所有",
+            "全体业主共有",
+            "擅自处置",
+            "所有权"
+          ]
+        },
+        {
+          "point": "事实认定之争",
+          "keywords": [
+            "修剪",
+            "违规砍伐",
+            "事前申请被拒",
+            "认定"
+          ]
+        },
+        {
+          "point": "罚款金额之疑",
+          "keywords": [
+            "罚款",
+            "过高",
+            "最低档处罚",
+            "听证"
+          ]
+        },
+        {
+          "point": "执法普法脱节",
+          "keywords": [
+            "不了解",
+            "释法",
+            "普法",
+            "不到位"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2022_b_3",
+      "type": "提出对策",
+      "n_gold": 4,
+      "n_decomposed": 4,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「科学设计直播方案」关键词「直播时间」不出自原文/材料",
+        "「扩大覆盖面」keywords 数量 7 不在 1-5"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "科学设计直播方案",
+          "keywords": [
+            "直播方案",
+            "直播地点",
+            "直播时间",
+            "互动环节",
+            "针对性宣传"
+          ]
+        },
+        {
+          "point": "创新直播方式",
+          "keywords": [
+            "法条讲解",
+            "事故警示",
+            "现场实验",
+            "网络游戏",
+            "连麦"
+          ]
+        },
+        {
+          "point": "打造专业化队伍",
+          "keywords": [
+            "直播团队",
+            "民警代言人",
+            "主播素质",
+            "活泼语言",
+            "真实演绎"
+          ]
+        },
+        {
+          "point": "扩大覆盖面",
+          "keywords": [
+            "多平台",
+            "热门主题",
+            "市民",
+            "学习",
+            "生活",
+            "工作",
+            "出行"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2022_b_4",
+      "type": "应用文",
+      "n_gold": 6,
+      "n_decomposed": 6,
+      "point_recall": 0.833,
+      "fabrication_rate": 0.167,
+      "structural_ok": false,
+      "structural_problems": [
+        "「执法为民主动沟通」关键词「人性化」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "点赞个人品质",
+          "keywords": [
+            "最美行政执法人",
+            "点赞",
+            "小陶"
+          ]
+        },
+        {
+          "point": "与时俱进提升自我",
+          "keywords": [
+            "大专到博士",
+            "坚持学习",
+            "博士学位"
+          ]
+        },
+        {
+          "point": "学习法规提升素养",
+          "keywords": [
+            "法律职业资格证书",
+            "法律知识",
+            "克服困难"
+          ]
+        },
+        {
+          "point": "带动团队学习钻研",
+          "keywords": [
+            "带领队员",
+            "讨论",
+            "新法条",
+            "新案例"
+          ]
+        },
+        {
+          "point": "学以致用提高效率",
+          "keywords": [
+            "学以致用",
+            "适配",
+            "执法效率"
+          ]
+        },
+        {
+          "point": "执法为民主动沟通",
+          "keywords": [
+            "以案说法",
+            "人性化",
+            "解决",
+            "百姓"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_a_1",
+      "type": "归纳概括",
+      "n_gold": 6,
+      "n_decomposed": 6,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「生态理念·人象和谐」长度 9 > 8 字",
+        "「生态理念·人象和谐」关键词「生态理念」不出自原文/材料",
+        "「生态理念·人象和谐」关键词「人与自然」不出自原文/材料",
+        "「耕读传统·全民阅读」长度 9 > 8 字",
+        "「天下为公·抗疫援助」长度 9 > 8 字"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "六尺巷·化解纠纷",
+          "keywords": [
+            "六尺巷",
+            "土地纠纷",
+            "化解"
+          ]
+        },
+        {
+          "point": "和为贵·调解室",
+          "keywords": [
+            "和为贵",
+            "调解室",
+            "邻里纠纷",
+            "民风"
+          ]
+        },
+        {
+          "point": "河长制·治水",
+          "keywords": [
+            "河长制",
+            "河道",
+            "水质",
+            "改善"
+          ]
+        },
+        {
+          "point": "生态理念·人象和谐",
+          "keywords": [
+            "生态理念",
+            "象群",
+            "人与自然",
+            "和谐"
+          ]
+        },
+        {
+          "point": "耕读传统·全民阅读",
+          "keywords": [
+            "耕读",
+            "全民阅读",
+            "书香城市",
+            "文明"
+          ]
+        },
+        {
+          "point": "天下为公·抗疫援助",
+          "keywords": [
+            "天下为公",
+            "疫情防控",
+            "援助",
+            "文化自觉"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_a_2",
+      "type": "综合分析",
+      "n_gold": 5,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「忠孝两全」关键词「忠孝两全」不出自原文/材料",
+        "「平衡取舍」关键词「不留遗憾」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "尽孝方式多样",
+          "keywords": [
+            "尽孝",
+            "方式",
+            "不止一种",
+            "结合实际情况"
+          ]
+        },
+        {
+          "point": "陪伴优先考量",
+          "keywords": [
+            "陪伴",
+            "优先",
+            "小万",
+            "辞职回家",
+            "爷爷"
+          ]
+        },
+        {
+          "point": "尽忠即尽孝",
+          "keywords": [
+            "国家",
+            "尽忠",
+            "黄旭华",
+            "隐姓埋名",
+            "舍小家"
+          ]
+        },
+        {
+          "point": "忠孝两全",
+          "keywords": [
+            "忠孝两全",
+            "周先生",
+            "回家乡",
+            "尽忠",
+            "尽孝"
+          ]
+        },
+        {
+          "point": "平衡取舍",
+          "keywords": [
+            "平衡",
+            "取舍",
+            "事业发展",
+            "国家需要",
+            "不留遗憾"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_a_3",
+      "type": "应用文",
+      "n_gold": 8,
+      "n_decomposed": 8,
+      "point_recall": 0.625,
+      "fabrication_rate": 0.375,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [
+        "标准答案中未明确给出具体截止日期，仅以'即日起至XXXX年XX月XX日'代替，采分点'征集时间'的关键词可能无法精确匹配，建议在评分时灵活处理。",
+        "标准答案中'投稿方式'仅给出邮箱占位符，未提供具体邮箱地址，故未单独设点，若实际作答中提及投稿方式可酌情给分。"
+      ],
+      "decomposed": [
+        {
+          "point": "大赛主题",
+          "keywords": [
+            "清风廉韵",
+            "微视频大赛"
+          ]
+        },
+        {
+          "point": "主办单位",
+          "keywords": [
+            "文明办",
+            "妇联",
+            "教育局"
+          ]
+        },
+        {
+          "point": "征集时间",
+          "keywords": [
+            "即日起",
+            "时间"
+          ]
+        },
+        {
+          "point": "征集对象",
+          "keywords": [
+            "全体市民"
+          ]
+        },
+        {
+          "point": "拍摄方式",
+          "keywords": [
+            "PC",
+            "手机",
+            "摄像头",
+            "DV"
+          ]
+        },
+        {
+          "point": "作品时长",
+          "keywords": [
+            "30秒",
+            "10分钟"
+          ]
+        },
+        {
+          "point": "内容要求",
+          "keywords": [
+            "教育意义",
+            "发人深省"
+          ]
+        },
+        {
+          "point": "作品形态",
+          "keywords": [
+            "纪录短片",
+            "DV短片",
+            "动画",
+            "动漫"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_b_1",
+      "type": "归纳概括",
+      "n_gold": 4,
+      "n_decomposed": 6,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「摊有序·数字化管理」长度 9 > 8 字",
+        "「稳定经营·商户和谐」长度 9 > 8 字",
+        "「治理温情·化解对立」长度 9 > 8 字",
+        "「治理温情·化解对立」关键词「化解对立」不出自原文/材料",
+        "「直播式执法·公众教育」长度 10 > 8 字",
+        "「直播式执法·公众教育」关键词「普及常识」不出自原文/材料",
+        "「柔性监管·轻微违法」长度 9 > 8 字",
+        "「信用修复·纾困普法」长度 9 > 8 字",
+        "「信用修复·纾困普法」关键词「拉近感情」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "摊有序·数字化管理",
+          "keywords": [
+            "摊有序",
+            "数字化",
+            "精细化管理",
+            "便民市场"
+          ]
+        },
+        {
+          "point": "稳定经营·商户和谐",
+          "keywords": [
+            "固定摊位",
+            "稳定经营",
+            "和谐",
+            "减少违规"
+          ]
+        },
+        {
+          "point": "治理温情·化解对立",
+          "keywords": [
+            "温情",
+            "微心愿",
+            "暖心摊位",
+            "化解对立",
+            "并肩前行"
+          ]
+        },
+        {
+          "point": "直播式执法·公众教育",
+          "keywords": [
+            "直播",
+            "垃圾分类",
+            "普及常识",
+            "处罚标准",
+            "自觉行动"
+          ]
+        },
+        {
+          "point": "柔性监管·轻微违法",
+          "keywords": [
+            "柔性监管",
+            "不予处罚",
+            "轻微违法",
+            "执法精度",
+            "温度"
+          ]
+        },
+        {
+          "point": "信用修复·纾困普法",
+          "keywords": [
+            "信用修复",
+            "为你跑",
+            "依法经营",
+            "拉近感情",
+            "降低执法难度"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_b_2",
+      "type": "综合分析",
+      "n_gold": 4,
+      "n_decomposed": 4,
+      "point_recall": 0.75,
+      "fabrication_rate": 0.25,
+      "structural_ok": false,
+      "structural_problems": [
+        "「维稳保障」keywords 数量 6 不在 1-5",
+        "「完善监管体系」keywords 数量 6 不在 1-5"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "联合执法",
+          "keywords": [
+            "联合执法",
+            "领导小组",
+            "多部门",
+            "协同作战",
+            "单打独斗"
+          ]
+        },
+        {
+          "point": "监管防线前移",
+          "keywords": [
+            "信息线索通报",
+            "捕捞、销售、消费",
+            "专项联合执法",
+            "打非断链"
+          ]
+        },
+        {
+          "point": "维稳保障",
+          "keywords": [
+            "社保",
+            "医保",
+            "住房保障",
+            "技能培训",
+            "专场招聘",
+            "长远生计"
+          ]
+        },
+        {
+          "point": "完善监管体系",
+          "keywords": [
+            "人防+技防",
+            "高清监控",
+            "雷达",
+            "无人机",
+            "护渔员",
+            "群防群治"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_b_3",
+      "type": "提出对策",
+      "n_gold": 4,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "组建志愿者队伍",
+          "keywords": [
+            "召集令",
+            "自愿加入",
+            "遴选",
+            "培训",
+            "报告"
+          ]
+        },
+        {
+          "point": "及时处置隐患",
+          "keywords": [
+            "迅速查处",
+            "统计分析",
+            "应急调度",
+            "就近匹配",
+            "协同处置"
+          ]
+        },
+        {
+          "point": "提升能力素质",
+          "keywords": [
+            "行业党委",
+            "流动党员党支部",
+            "培训班",
+            "监管知识",
+            "沟通技巧"
+          ]
+        },
+        {
+          "point": "调动积极性",
+          "keywords": [
+            "积分奖励",
+            "兑换代金券",
+            "爱心驿站",
+            "食安找茬",
+            "归属感"
+          ]
+        },
+        {
+          "point": "平台上传线索",
+          "keywords": [
+            "拍摄照片",
+            "视频",
+            "食安宝",
+            "上传"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_c_1",
+      "type": "归纳概括",
+      "n_gold": 4,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「村务员·治理」关键词「化解矛盾」不出自原文/材料",
+        "「博士帮帮团·技术」关键词「博士帮帮团」不出自原文/材料",
+        "「博士帮帮团·育人」关键词「专家授课」不出自原文/材料",
+        "「文艺爱好者·文化」关键词「丰富文化生活」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "村务员·治理",
+          "keywords": [
+            "村务员",
+            "熟乡情",
+            "接地气",
+            "巡查",
+            "化解矛盾"
+          ]
+        },
+        {
+          "point": "博士帮帮团·技术",
+          "keywords": [
+            "博士帮帮团",
+            "技术优势",
+            "推广农业技术",
+            "成果转化",
+            "农业现代化"
+          ]
+        },
+        {
+          "point": "博士帮帮团·育人",
+          "keywords": [
+            "实践教学",
+            "培养农技人才",
+            "农业委培生",
+            "专家授课"
+          ]
+        },
+        {
+          "point": "规划师·设计",
+          "keywords": [
+            "乡村规划师",
+            "设计专长",
+            "规划",
+            "村民需求",
+            "乡土文化"
+          ]
+        },
+        {
+          "point": "文艺爱好者·文化",
+          "keywords": [
+            "文艺爱好者",
+            "志愿者团队",
+            "自编自演",
+            "村村巡演",
+            "丰富文化生活"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_c_2",
+      "type": "综合分析",
+      "n_gold": 4,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.2,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "做强特色产业",
+          "keywords": [
+            "特色产业",
+            "全产业链",
+            "深加工",
+            "统一品牌",
+            "抱团发展"
+          ]
+        },
+        {
+          "point": "建立利益共享机制",
+          "keywords": [
+            "利益共享",
+            "创业支持",
+            "绑定",
+            "深度合作",
+            "增收"
+          ]
+        },
+        {
+          "point": "建强供应链",
+          "keywords": [
+            "供应链",
+            "对接市场",
+            "市场标准",
+            "附加值"
+          ]
+        },
+        {
+          "point": "提供学习平台",
+          "keywords": [
+            "培训基地",
+            "培训",
+            "高校合作",
+            "深造",
+            "乡土人才"
+          ]
+        },
+        {
+          "point": "虹吸效应引才",
+          "keywords": [
+            "虹吸效应",
+            "吸引人才",
+            "回乡创业"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2023_c_3",
+      "type": "提出对策",
+      "n_gold": 5,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「提高服务」关键词「保留特色服务」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "宣传到位",
+          "keywords": [
+            "多渠道",
+            "提前发布",
+            "知晓面",
+            "公告栏"
+          ]
+        },
+        {
+          "point": "广泛参与",
+          "keywords": [
+            "友邻有伴",
+            "数字化平台",
+            "共享区",
+            "各年龄段"
+          ]
+        },
+        {
+          "point": "提高服务",
+          "keywords": [
+            "保留特色服务",
+            "传统便民",
+            "志愿者队伍",
+            "上门服务"
+          ]
+        },
+        {
+          "point": "优化政策宣传",
+          "keywords": [
+            "政策培训",
+            "增配咨询人员",
+            "宣传手册数量"
+          ]
+        },
+        {
+          "point": "完善公益机制",
+          "keywords": [
+            "微心愿",
+            "公示捐款用途",
+            "居民代表监督",
+            "信任度"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2024_b_1",
+      "type": "归纳概括",
+      "n_gold": 4,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「AI小秘书」关键词「整合数据」不出自原文/材料",
+        "「AI小秘书」关键词「精准支撑」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "行政行为码",
+          "keywords": [
+            "行政行为码",
+            "一码关联",
+            "一码查询",
+            "一码追踪",
+            "阳光高效"
+          ]
+        },
+        {
+          "point": "智慧交通系统",
+          "keywords": [
+            "智慧交通运输管理系统",
+            "源头监管",
+            "路面管控",
+            "超载超限"
+          ]
+        },
+        {
+          "point": "人群热力图",
+          "keywords": [
+            "人群聚集热力图",
+            "实时监测",
+            "防拥挤",
+            "防踩踏"
+          ]
+        },
+        {
+          "point": "智能警务",
+          "keywords": [
+            "智能警务",
+            "视频巡逻",
+            "防走失系统"
+          ]
+        },
+        {
+          "point": "AI小秘书",
+          "keywords": [
+            "AI小秘书",
+            "整合数据",
+            "执法记录",
+            "精准支撑"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2024_b_2",
+      "type": "综合分析",
+      "n_gold": 4,
+      "n_decomposed": 7,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.143,
+      "structural_ok": false,
+      "structural_problems": [
+        "「如意棒与紧箍咒关系」长度 9 > 8 字",
+        "「宽严相济令人信服」关键词「公正」不出自原文/材料",
+        "「原因分析」关键词「规范不明确」不出自原文/材料",
+        "「执法理念与队伍建设」长度 9 > 8 字"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "如意棒与紧箍咒关系",
+          "keywords": [
+            "如意棒",
+            "紧箍咒",
+            "行政裁量权",
+            "约束"
+          ]
+        },
+        {
+          "point": "宽严相济令人信服",
+          "keywords": [
+            "宽严相济",
+            "令人信服",
+            "公正"
+          ]
+        },
+        {
+          "point": "执法不公问题",
+          "keywords": [
+            "畸轻畸重",
+            "宽严不济",
+            "利益挂钩",
+            "类案不同罚",
+            "自我裁决"
+          ]
+        },
+        {
+          "point": "群众不信服怨言",
+          "keywords": [
+            "不信服",
+            "怨言",
+            "行政相对人"
+          ]
+        },
+        {
+          "point": "原因分析",
+          "keywords": [
+            "政绩观错位",
+            "规范不明确",
+            "幅度宽泛",
+            "缺乏例示"
+          ]
+        },
+        {
+          "point": "制度建设对策",
+          "keywords": [
+            "裁量权基准",
+            "细化量化",
+            "执法权限",
+            "幅度",
+            "监督指导"
+          ]
+        },
+        {
+          "point": "执法理念与队伍建设",
+          "keywords": [
+            "法理事理",
+            "为民意识",
+            "队伍建设",
+            "权为民所用"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2024_b_3",
+      "type": "应用文",
+      "n_gold": 10,
+      "n_decomposed": 8,
+      "point_recall": 0.6,
+      "fabrication_rate": 0.125,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [
+        "监管举报部分在标准答案中属于结尾呼吁，非倡议主体，故score=0，但可作为补充点。",
+        "标准答案结构完整，但部分倡议点（如不售假货）在材料中有具体案例支撑，拆点已覆盖。"
+      ],
+      "decomposed": [
+        {
+          "point": "背景问题",
+          "keywords": [
+            "诚信意识淡薄",
+            "假冒",
+            "虚假宣传",
+            "消费者满意度不高"
+          ]
+        },
+        {
+          "point": "倡议目的",
+          "keywords": [
+            "规范直播带货",
+            "维护消费者合法权益"
+          ]
+        },
+        {
+          "point": "坚守价值观",
+          "keywords": [
+            "社会主义核心价值观",
+            "公序良俗",
+            "正向影响力"
+          ]
+        },
+        {
+          "point": "不售假货",
+          "keywords": [
+            "假冒注册商标",
+            "支持正品",
+            "市场秩序"
+          ]
+        },
+        {
+          "point": "杜绝虚假宣传",
+          "keywords": [
+            "虚假宣传",
+            "夸大产品成效",
+            "提升产品品质"
+          ]
+        },
+        {
+          "point": "禁止串通比价",
+          "keywords": [
+            "相互串通",
+            "诱骗下单",
+            "恶意比价"
+          ]
+        },
+        {
+          "point": "禁止虚假氛围",
+          "keywords": [
+            "虚假信息",
+            "紧张销售氛围",
+            "亏本让利"
+          ]
+        },
+        {
+          "point": "监管举报",
+          "keywords": [
+            "监督监管",
+            "12315",
+            "举报"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2024_c_1",
+      "type": "归纳概括",
+      "n_gold": 4,
+      "n_decomposed": 6,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「绿色生态种养」关键词「不用化肥农药」不出自原文/材料",
+        "「大托管集约生产」关键词「统一耕、种、防、收、售」不出自原文/材料",
+        "「戏曲小镇文旅融合」关键词「文旅融合」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "绿色生态种养",
+          "keywords": [
+            "高端香稻",
+            "禾虫",
+            "绿色生态种养",
+            "不用化肥农药"
+          ]
+        },
+        {
+          "point": "种养结合增收",
+          "keywords": [
+            "质优价高",
+            "高价值",
+            "增收",
+            "供不应求"
+          ]
+        },
+        {
+          "point": "大托管集约生产",
+          "keywords": [
+            "大托管",
+            "集约化",
+            "统一耕、种、防、收、售"
+          ]
+        },
+        {
+          "point": "分红模式促增收",
+          "keywords": [
+            "分红",
+            "丰收",
+            "产量",
+            "快速变现"
+          ]
+        },
+        {
+          "point": "民宿集群带动旅游",
+          "keywords": [
+            "A宿集",
+            "民宿集群",
+            "旅游",
+            "就业增收"
+          ]
+        },
+        {
+          "point": "戏曲小镇文旅融合",
+          "keywords": [
+            "戏曲小镇",
+            "平调落子",
+            "旅游资源",
+            "文旅融合"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2024_c_2",
+      "type": "综合分析",
+      "n_gold": 5,
+      "n_decomposed": 6,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.167,
+      "structural_ok": true,
+      "structural_problems": [],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "创新惠民工程",
+          "keywords": [
+            "同心小院",
+            "创新惠民工程",
+            "深度参与自治"
+          ]
+        },
+        {
+          "point": "强化组织领导",
+          "keywords": [
+            "聚居程度",
+            "亲缘关系",
+            "党员分布",
+            "退休党员",
+            "召集人"
+          ]
+        },
+        {
+          "point": "积极调解纠纷",
+          "keywords": [
+            "化解矛盾",
+            "打开心结",
+            "邻里关系"
+          ]
+        },
+        {
+          "point": "上级高度支持",
+          "keywords": [
+            "上报",
+            "群众关切",
+            "上级",
+            "根本解决"
+          ]
+        },
+        {
+          "point": "党员示范带动",
+          "keywords": [
+            "党员",
+            "牵头",
+            "保洁责任区",
+            "带动"
+          ]
+        },
+        {
+          "point": "健全机制载体",
+          "keywords": [
+            "小院课堂",
+            "小院剧场",
+            "院规民约",
+            "议事会",
+            "积分制"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2024_c_3",
+      "type": "应用文",
+      "n_gold": 9,
+      "n_decomposed": 7,
+      "point_recall": 0.667,
+      "fabrication_rate": 0.143,
+      "structural_ok": false,
+      "structural_problems": [
+        "「对策·水稻+种养」关键词「增收3000元」不出自原文/材料",
+        "「对策·保障支持」关键词「缓解阵痛」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "背景·政策要求",
+          "keywords": [
+            "耕地红线",
+            "非粮化",
+            "严格控制耕地转为其他农用地"
+          ]
+        },
+        {
+          "point": "问题·种藕蔓延",
+          "keywords": [
+            "基本农田种藕",
+            "蔓延",
+            "亟待遏制"
+          ]
+        },
+        {
+          "point": "阻碍·收益损失",
+          "keywords": [
+            "收益高",
+            "损失",
+            "复垦成本"
+          ]
+        },
+        {
+          "point": "对策·水稻+种养",
+          "keywords": [
+            "水稻+",
+            "一田多用",
+            "一季多收",
+            "增收3000元"
+          ]
+        },
+        {
+          "point": "对策·轮作优势",
+          "keywords": [
+            "水稻油菜轮作",
+            "有机认证",
+            "技术支持"
+          ]
+        },
+        {
+          "point": "对策·保障支持",
+          "keywords": [
+            "资金补助",
+            "合作耕种",
+            "缓解阵痛"
+          ]
+        },
+        {
+          "point": "号召·粮食安全",
+          "keywords": [
+            "粮食安全",
+            "国之大者",
+            "共同努力"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2025_a_1",
+      "type": "归纳概括",
+      "n_gold": 5,
+      "n_decomposed": 5,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「南京·红楼沉浸体验」长度 9 > 8 字",
+        "「自贡·恐龙超级IP」长度 9 > 8 字",
+        "「苏州·文创跨界融合」长度 9 > 8 字",
+        "「苏州·文创跨界融合」关键词「拓宽发展空间」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "南京·红楼沉浸体验",
+          "keywords": [
+            "大梦·红楼",
+            "沉浸式",
+            "重读原著",
+            "年轻人"
+          ]
+        },
+        {
+          "point": "西安·对诗活动",
+          "keywords": [
+            "对诗",
+            "诗词",
+            "文化基因",
+            "情感共鸣"
+          ]
+        },
+        {
+          "point": "山西·悟空游山西",
+          "keywords": [
+            "跟着悟空游山西",
+            "黑神话：悟空",
+            "文旅新赛道",
+            "海内外游客"
+          ]
+        },
+        {
+          "point": "自贡·恐龙超级IP",
+          "keywords": [
+            "恐龙超级IP",
+            "经济效益",
+            "城市灵魂",
+            "核心竞争力"
+          ]
+        },
+        {
+          "point": "苏州·文创跨界融合",
+          "keywords": [
+            "苏州博物馆",
+            "文创",
+            "跨界融合",
+            "门票收入",
+            "拓宽发展空间"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2025_a_2",
+      "type": "综合分析",
+      "n_gold": 5,
+      "n_decomposed": 8,
+      "point_recall": 1.0,
+      "fabrication_rate": 0.0,
+      "structural_ok": false,
+      "structural_problems": [
+        "「理性分析·全面考量」长度 9 > 8 字",
+        "「Z城·同质化教训」关键词「消费形式单一」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "理性分析·全面考量",
+          "keywords": [
+            "理性分析",
+            "全面考量",
+            "抓住机遇",
+            "扬长补短",
+            "做好规划"
+          ]
+        },
+        {
+          "point": "B城·挖掘资源",
+          "keywords": [
+            "独特资源",
+            "创意",
+            "个性化需求",
+            "持续健康发展"
+          ]
+        },
+        {
+          "point": "B城·及时整改",
+          "keywords": [
+            "整改",
+            "号召市民",
+            "配合"
+          ]
+        },
+        {
+          "point": "Z城·创意爆品",
+          "keywords": [
+            "小串",
+            "小饼",
+            "小葱",
+            "创意",
+            "爆品"
+          ]
+        },
+        {
+          "point": "Z城·政府保障",
+          "keywords": [
+            "高效执行力",
+            "人文关怀",
+            "保障"
+          ]
+        },
+        {
+          "point": "Z城·同质化教训",
+          "keywords": [
+            "同质化",
+            "消费形式单一",
+            "流量渐失",
+            "持续丰富",
+            "好奇心"
+          ]
+        },
+        {
+          "point": "H城·规划不足",
+          "keywords": [
+            "迅速反应",
+            "服务保障",
+            "合理规划",
+            "影响群众生活"
+          ]
+        },
+        {
+          "point": "H城·统筹兼顾",
+          "keywords": [
+            "统筹",
+            "时间地点",
+            "兼顾群众生活",
+            "持久"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiangsu_2025_a_3",
+      "type": "应用文",
+      "n_gold": 6,
+      "n_decomposed": 7,
+      "point_recall": 0.667,
+      "fabrication_rate": 0.143,
+      "structural_ok": false,
+      "structural_problems": [
+        "「发布平台」关键词「版权服务平台」不出自原文/材料",
+        "「发布平台」关键词「推动创新」不出自原文/材料",
+        "「授牌仪式」关键词「产学研融合」不出自原文/材料",
+        "「大会意义」关键词「促进交流合作」不出自原文/材料"
+      ],
+      "score_deviation": 0.0,
+      "over_split": false,
+      "warnings": [],
+      "decomposed": [
+        {
+          "point": "时间地点",
+          "keywords": [
+            "2024年5月28日",
+            "扬州广陵公共文化中心",
+            "举行"
+          ]
+        },
+        {
+          "point": "参会人员",
+          "keywords": [
+            "青年创客",
+            "青商会",
+            "院校",
+            "企业",
+            "产业基金"
+          ]
+        },
+        {
+          "point": "大会主题",
+          "keywords": [
+            "大运河青年文创产业合作大会",
+            "共谋发展"
+          ]
+        },
+        {
+          "point": "发布平台",
+          "keywords": [
+            "大运河青澜文创湾知识产权",
+            "版权服务平台",
+            "保护创作者权益",
+            "激发创作热情",
+            "推动创新"
+          ]
+        },
+        {
+          "point": "授牌仪式",
+          "keywords": [
+            "大运河青年文创展厅",
+            "授牌",
+            "产学研融合",
+            "注入新活力"
+          ]
+        },
+        {
+          "point": "工作坊启动",
+          "keywords": [
+            "行走扬州城",
+            "研究生工作坊",
+            "揭牌",
+            "联合实施",
+            "用户体验设计"
+          ]
+        },
+        {
+          "point": "大会意义",
+          "keywords": [
+            "促进交流合作",
+            "清明上河图",
+            "徐徐展开"
+          ]
+        }
+      ]
+    }
+  ],
+  "dirty_rows": [
+    {
+      "id": "dirty_canque_1",
+      "question_id": "henan_2025_city_1",
+      "dirty_type": "残缺",
+      "n_gold": 9,
+      "n_decomposed": 6,
+      "warning_hit": false,
+      "warnings": [],
+      "pass": false
+    },
+    {
+      "id": "dirty_canque_2",
+      "question_id": "jiangsu_2022_b_3",
+      "dirty_type": "残缺",
+      "n_gold": 4,
+      "n_decomposed": 4,
+      "warning_hit": false,
+      "warnings": [
+        "标准答案过于简略，仅列出四个要点，可能不足以覆盖材料中的丰富内容，建议补充更多细节如直播团队、民警代言人、连麦互动、游戏植入等。"
+      ],
+      "pass": false
+    },
+    {
+      "id": "dirty_kouyu_1",
+      "question_id": "jiangsu_2023_a_1",
+      "dirty_type": "口语化",
+      "n_gold": 6,
+      "n_decomposed": 6,
+      "warning_hit": false,
+      "warnings": [],
+      "pass": false
+    },
+    {
+      "id": "dirty_kouyu_2",
+      "question_id": "jiangsu_2023_a_2",
+      "dirty_type": "口语化",
+      "n_gold": 5,
+      "n_decomposed": 4,
+      "warning_hit": true,
+      "warnings": [
+        "标准答案过于简略，仅提及小万陪伴爷爷，未覆盖黄旭华、老周等事例，疑似标答过简，建议更换或补充。"
+      ],
+      "pass": false
+    },
+    {
+      "id": "dirty_chaocuo_1",
+      "question_id": "henan_2024_city_2",
+      "dirty_type": "抄错",
+      "n_gold": 5,
+      "n_decomposed": 5,
+      "warning_hit": false,
+      "warnings": [],
+      "pass": false
+    },
+    {
+      "id": "dirty_chaocuo_2",
+      "question_id": "jiangsu_2023_c_3",
+      "dirty_type": "抄错",
+      "n_gold": 5,
+      "n_decomposed": 5,
+      "warning_hit": false,
+      "warnings": [],
+      "pass": false
+    }
+  ]
+}

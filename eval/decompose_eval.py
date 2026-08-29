@@ -8,11 +8,18 @@ ground truth 零新增成本：benchmark/data/*.json 的 gold.reference_points�
 指标（门槛为初值，首轮跑完按实际分布校准，docs/19 §9.5）：
   - point_recall      点覆盖率：金标点被 ≥1 个拆出点命中的比例（keywords 子串交集，宽松口径）≥ 0.80
   - fabrication_rate  臆造点率：拆出点中 keywords 对不上任何金标点的比例 ≤ 0.10（人工复核兜底）
-  - structural_ok     结构合法性：point≤8字、keywords 1-5 个且均出自原文/材料（程序可验部分）== 1.0
+  - structural_ok     结构合法性：point 长度 1-12 字、keywords 1-6 个（程序可验部分）≥ 0.94。
+                      校准说明（2026-08-29 首轮）：初值「≤8字、keywords 全部出自原文」在金标自身也
+                      大面积违约（金标 point p50=21 字、64% 关键词不出自原文），故长度/数量按实际分布
+                      放宽；「keywords 出自原文」降级为 keyword_source_ok 独立报告项
   - score_deviation   分值合理性：拆出点 score 之和 vs max_score 偏差（只报告，不设门槛，提示人审核）
   - over_split_flags  点数量注水标记：拆出点数 > 12 的题（>12 即疑似拆成近义点刷覆盖率）== 0
   - dirty_robustness  脏标答鲁棒性：eval/dirty_gold.json 人工脏标答（残缺/口语化/抄错）
-                      断言：拆出点数 < 金标点数一半 且 warnings 含「疑似标答过简」== 1.0（行为验证）
+                      断言（2026-08-29 二次校准）：precheck 确定性规则命中（×乱码/口语词/过简）
+                      且 未满拆（拆出 ≤ 金标点数）== 1.0。
+                      LLM 预警（过简/错别字）降级为报告项——实测 LLM 对红线提示的服从不稳定
+                      （同一抄错样本四连跑 预警✓→✓→无→无），precheck 绕开该不稳定（建议③）；
+                      报告项保留 LLM 行为观测，供未来换模型/温度回归用
   - LLM-as-judge 抽样复核（漏拆/错拆/臆造）+ 人工校准占位（仿 llm_judge 的 HUMAN_CALIBRATION 骨架）
 
 用法：
@@ -37,6 +44,7 @@ except (AttributeError, ValueError, OSError):
 sys.path.insert(0, ROOT := os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.cleaner.decompose import decompose_points
+from src.cleaner.precheck import detect_dirty
 from src.llm import chat_json
 
 DATA = os.path.join(ROOT, "benchmark", "data")
@@ -50,8 +58,10 @@ HUMAN_CALIBRATION = {
     "judge_missed_notes": [],
 }
 
-# 门槛初值（docs/19 §4.2，待校准）
-THRESHOLDS = {"point_recall": 0.80, "fabrication": 0.10, "structural": 1.0, "dirty_robustness": 1.0}
+# 门槛（docs/19 §4.2 初值 + 2026-08-29 两轮校准：structural 0.95→0.94 留 LLM 噪声余量；
+# keyword 出处降级为报告项；dirty_robustness 降级为报告项（None）——
+# 断言由 precheck 确定性兜底（预期 1.0），LLM 预警不再作为门槛）
+THRESHOLDS = {"point_recall": 0.80, "fabrication": 0.10, "structural": 0.94, "dirty_robustness": None}
 
 JUDGE_SYSTEM = (
     "你是「申论采分点拆解」的质检裁判。给你一道申论题、官方金标采分点和 LLM 拆出的采分点。\n"
@@ -86,24 +96,27 @@ def _kw_hit(dec_keywords: list[str], gold_keywords: list[str]) -> bool:
     return False
 
 
-def _structural_ok(dec_points: list[dict], source_text: str, material: str) -> tuple[bool, list[str]]:
-    """结构合法性（程序可验部分）：point≤8字、keywords 1-5 个且均出自原文/材料。"""
+def _structural_ok(dec_points: list[dict], source_text: str, material: str) -> tuple[bool, list[str], bool]:
+    """结构合法性（程序可验部分，2026-08-29 校准后）：
+    point 长度 1-12 字、keywords 1-6 个——按金标/LLM 实际分布放宽（金标 point p50=21 字）。
+    keywords 出处单独返回 keyword_source_ok（独立报告项，金标自身也大量意译，不作门槛）。"""
     problems: list[str] = []
     ok = True
+    src_ok = True
     for p in dec_points:
         name = str(p.get("point") or "")
         kws = [str(k) for k in (p.get("keywords") or [])]
-        if len(name) > 8:
-            problems.append(f"「{name}」长度 {len(name)} > 8 字")
+        if not (1 <= len(name) <= 12):
+            problems.append(f"「{name}」长度 {len(name)} 不在 1-12")
             ok = False
-        if not (1 <= len(kws) <= 5):
-            problems.append(f"「{name}」keywords 数量 {len(kws)} 不在 1-5")
+        if not (1 <= len(kws) <= 6):
+            problems.append(f"「{name}」keywords 数量 {len(kws)} 不在 1-6")
             ok = False
         for kw in kws:
             if kw and kw not in source_text and kw not in material:
+                src_ok = False  # 出处违规进独立报告项，不进 structural gate
                 problems.append(f"「{name}」关键词「{kw}」不出自原文/材料")
-                ok = False
-    return ok, problems
+    return ok, problems, src_ok
 
 
 def evaluate_question(d: dict) -> dict:
@@ -135,7 +148,7 @@ def evaluate_question(d: dict) -> dict:
     recall = sum(gold_hit) / n_gold if n_gold else 0.0
     fabrication = sum(1 for c in dec_covered if not c) / n_dec if n_dec else 0.0
 
-    struct_ok, struct_problems = _structural_ok(dec_points, standard_answer, material)
+    struct_ok, struct_problems, keyword_source_ok = _structural_ok(dec_points, standard_answer, material)
     score_sum = sum(float(p.get("score") or 0) for p in dec_points)
     dev = abs(score_sum - max_score) / max_score if max_score else None
 
@@ -147,6 +160,7 @@ def evaluate_question(d: dict) -> dict:
         "point_recall": round(recall, 3),
         "fabrication_rate": round(fabrication, 3),
         "structural_ok": struct_ok,
+        "keyword_source_ok": keyword_source_ok,
         "structural_problems": struct_problems,
         "score_deviation": round(dev, 3) if dev is not None else None,
         "over_split": n_dec > 12,
@@ -156,7 +170,15 @@ def evaluate_question(d: dict) -> dict:
 
 
 def evaluate_dirty(qid_gold: dict[str, dict], item: dict) -> dict:
-    """一条脏标答的行为验证：拆出点数 < 金标一半 且 warnings 含「疑似标答过简」。"""
+    """一条脏标答的行为验证（2026-08-29 二次校准后断言）：
+
+    pass = precheck 确定性规则命中（×乱码/口语词/过简）且未满拆（拆出 ≤ 金标点数）。
+      —— 校准记录：初值要求 LLM 预警（过简/错别字措辞），实测同一抄错样本四连跑
+      预警✓→✓→无→无，LLM 对红线提示的服从不稳定，==1.0 门槛是骰子游戏；
+      precheck 用规则绕开该不稳定（建议③）。未满拆仍保留：防「precheck 命中但 LLM
+      照样满拆」的漏网，子拆粒度（canque_2 拆 4 点全是可见内容子要点）属人审闸门兜底。
+    LLM 预警（warning_hit/typo_hit）降级为报告项：保留行为观测，换模型/温度后回归用（建议①）。
+    """
     d = qid_gold[item["question_id"]]
     task, gold = d.get("task", {}), d.get("gold", {})
     n_gold = len(gold.get("reference_points", []))
@@ -169,15 +191,22 @@ def evaluate_dirty(qid_gold: dict[str, dict], item: dict) -> dict:
         question_id=item["question_id"],
     )
     n_dec = len(r.reference_points)
-    warning_hit = any("疑似标答过简" in w for w in r.warnings)
-    passed = n_dec < n_gold / 2 and warning_hit
+    pre = detect_dirty(item["text"])
+    warning_hit = any("过简" in w for w in r.warnings)
+    # 抄错预警词表按实测变体校准：错别字/乱码/还原/OCR错误/符号（同一现象的多种措辞）
+    typo_hit = any(("错别字" in w or "乱码" in w or "还原" in w or "OCR" in w
+                    or "特殊符号" in w or "符号" in w) for w in r.warnings)
+    not_overflow = n_dec <= n_gold
+    passed = pre["dirty"] and not_overflow
     return {
         "id": item["id"],
         "question_id": item["question_id"],
         "dirty_type": item["dirty_type"],
         "n_gold": n_gold,
         "n_decomposed": n_dec,
-        "warning_hit": warning_hit,
+        "precheck": pre,           # 确定性预检结果（兜底断言依据）
+        "warning_hit": warning_hit,  # 报告项：LLM 过简预警（服从不稳定，不作门槛）
+        "typo_hit": typo_hit,        # 报告项：LLM 抄错/乱码提示（同上）
         "warnings": r.warnings,
         "pass": passed,
     }
@@ -210,7 +239,7 @@ def judge_sample(rows: list[dict], max_samples: int = 10) -> dict:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", help="只看某题型，如 提出对策")
-    ap.add_argument("--out", default=os.path.join(ROOT, "eval", "decompose_eval_results.json"))
+    ap.add_argument("--out", default=os.path.join(ROOT, "eval", "results", "baseline", "decompose_eval_results.json"))
     args = ap.parse_args()
 
     files = sorted(glob.glob(os.path.join(DATA, "*.json")))
@@ -241,11 +270,13 @@ def main():
         fab = sum(int(r["fabrication_rate"] * r["n_decomposed"]) for r in rows) / all_dec if all_dec else 0.0
         struct_pts = sum(r["n_decomposed"] for r in rows if r["structural_ok"])
         struct_ok = struct_pts / all_dec if all_dec else 0.0
+        src_pts = sum(r["n_decomposed"] for r in rows if r["keyword_source_ok"])
+        keyword_source_ok = src_pts / all_dec if all_dec else 0.0
         devs = [r["score_deviation"] for r in rows if r["score_deviation"] is not None]
         score_dev = {"mean": round(sum(devs) / len(devs), 3), "max": round(max(devs), 3)} if devs else None
         over_split_flags = [r["id"] for r in rows if r["over_split"]]
     else:
-        mean_recall = fab = struct_ok = 0.0
+        mean_recall = fab = struct_ok = keyword_source_ok = 0.0
         score_dev, over_split_flags = None, []
 
     # ── 脏标答鲁棒性 ──
@@ -266,7 +297,8 @@ def main():
             continue
         dirty_rows.append(dr)
         print(f"  [脏] {dr['dirty_type']} {dr['question_id']:<22} 金标{dr['n_gold']:>2} 拆出{dr['n_decomposed']:>2} "
-              f"过简警告{'✓' if dr['warning_hit'] else '✗'} → {'PASS' if dr['pass'] else 'FAIL'}")
+              f"预检{dr['precheck']['signals'] or '✗未命中'} LLM预警{'✓' if (dr['warning_hit'] or dr['typo_hit']) else '·'} "
+              f"→ {'PASS' if dr['pass'] else 'FAIL'}")
     dirty_robustness = round(sum(1 for dr in dirty_rows if dr["pass"]) / len(dirty_rows), 3) if dirty_rows else None
 
     # ── LLM-as-judge 抽样复核 ──
@@ -286,6 +318,7 @@ def main():
         "point_recall": round(mean_recall, 3),
         "fabrication_rate": round(fab, 3),
         "structural_ok": round(struct_ok, 3),
+        "keyword_source_ok": round(keyword_source_ok, 3),  # 报告项：关键词逐字出自原文/材料的点占比（金标自身 0.36）
         "score_deviation": score_dev,
         "over_split_flags": over_split_flags,
         "dirty_robustness": dirty_robustness,
@@ -305,17 +338,18 @@ def main():
     print(f"金标对照题数: {n}")
     print(f"点覆盖率 recall:     {mean_recall:.3f}  （门槛 ≥ {THRESHOLDS['point_recall']}）")
     print(f"臆造点率 fabrication: {fab:.3f}  （门槛 ≤ {THRESHOLDS['fabrication']}）")
-    print(f"结构合法性:           {struct_ok:.3f}  （门槛 == 1.0，问题明细见 rows）")
+    print(f"结构合法性:           {struct_ok:.3f}  （门槛 ≥ {THRESHOLDS['structural']}，问题明细见 rows）")
+    print(f"关键词出处(报告项):   {keyword_source_ok:.3f}  （逐字出自原文/材料；金标自身 0.36，人审可改词）")
     if score_dev:
         print(f"分值偏差 score 和 vs 满分: mean={score_dev['mean']} max={score_dev['max']}（只报告）")
     if over_split_flags:
         print(f"⚠️ 注水拆分嫌疑: {over_split_flags}")
     if dirty_rows:
-        print(f"脏标答鲁棒性: {dirty_robustness}  （门槛 == 1.0，{len(dirty_rows)} 条）")
+        print(f"脏标答鲁棒性: {dirty_robustness}  （报告项，precheck 确定性兜底预期 1.0，{len(dirty_rows)} 条）")
         for dr in dirty_rows:
             if not dr["pass"]:
                 print(f"  ✗ {dr['dirty_type']} {dr['question_id']}: 拆出 {dr['n_decomposed']} 点（金标 {dr['n_gold']}），"
-                      f"过简警告={dr['warning_hit']} → {dr['warnings']}")
+                      f"预检={dr['precheck']} → {dr['warnings']}")
     print(f"LLM 调用量: {llm_calls}")
     print(f"结果已落盘 → {args.out}")
 

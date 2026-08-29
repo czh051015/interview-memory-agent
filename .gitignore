@@ -35,8 +35,10 @@ data/spaces/
 # 可视化生成产物（echarts.min.js + report.html，可重新生成/下载）
 data/viz/
 
-# eval 生成结果与临时校对清单
-eval/retrieval_eval_results.json
+# eval 生成结果与临时校对清单（三套件产物统一忽略，落在 eval/results/baseline/，run 归档在 eval/results/ 下留存）
+eval/results/baseline/score_eval_results.json
+eval/results/baseline/decompose_eval_results.json
+eval/results/baseline/guidance_eval_results.json
 eval/*清单*.md
 eval/标注反查-精简.md
 

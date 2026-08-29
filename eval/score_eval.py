@@ -12,7 +12,7 @@
 用法：
   python eval/score_eval.py
   python eval/score_eval.py --only 提出对策        # 只看某题型
-  python eval/score_eval.py --out eval/score_eval_results.json
+  python eval/score_eval.py --out eval/results/baseline/score_eval_results.json
 """
 from __future__ import annotations
 
@@ -24,6 +24,11 @@ import sys
 from collections import defaultdict
 
 sys.path.insert(0, ROOT := os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
 
 from src.shenlun.score import from_benchmark, score_answer
 
@@ -42,7 +47,7 @@ def load_file(path: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", help="只看某题型，如 提出对策")
-    ap.add_argument("--out", default=os.path.join(ROOT, "eval", "score_eval_results.json"))
+    ap.add_argument("--out", default=os.path.join(ROOT, "eval", "results", "baseline", "score_eval_results.json"))
     args = ap.parse_args()
 
     rows = []
