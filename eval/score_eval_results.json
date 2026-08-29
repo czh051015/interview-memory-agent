@@ -1,0 +1,377 @@
+{
+  "summary": {
+    "n_questions": 36,
+    "mean_discrimination": 0.899,
+    "no_fool": 1.0,
+    "good_leak_count": 1,
+    "bad_fooled_ids": [],
+    "per_type_discrimination": {
+      "应用文": 0.788,
+      "综合分析": 0.951,
+      "归纳概括": 0.929,
+      "提出对策": 1.0
+    }
+  },
+  "rows": [
+    {
+      "id": "henan_2024_city_1",
+      "type": "应用文",
+      "n_points": 8,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.25,
+      "discrimination": 0.75,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2024_city_2",
+      "type": "综合分析",
+      "n_points": 5,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2024_city_3",
+      "type": "应用文",
+      "n_points": 10,
+      "good_ratio": 0.9,
+      "bad_ratio": 0.2,
+      "discrimination": 0.7,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_city_1",
+      "type": "归纳概括",
+      "n_points": 9,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.111,
+      "discrimination": 0.889,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_city_2",
+      "type": "应用文",
+      "n_points": 11,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.091,
+      "discrimination": 0.909,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_city_3",
+      "type": "综合分析",
+      "n_points": 6,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_county_1",
+      "type": "归纳概括",
+      "n_points": 5,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_county_2",
+      "type": "应用文",
+      "n_points": 12,
+      "good_ratio": 0.917,
+      "bad_ratio": 0.083,
+      "discrimination": 0.833,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_county_3",
+      "type": "综合分析",
+      "n_points": 7,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.143,
+      "discrimination": 0.857,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_county_4",
+      "type": "应用文",
+      "n_points": 6,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.167,
+      "discrimination": 0.833,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "henan_2025_county_5",
+      "type": "归纳概括",
+      "n_points": 6,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.167,
+      "discrimination": 0.833,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2019_b_1",
+      "type": "综合分析",
+      "n_points": 3,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2019_b_2",
+      "type": "归纳概括",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.25,
+      "discrimination": 0.75,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2019_b_3",
+      "type": "应用文",
+      "n_points": 8,
+      "good_ratio": 0.875,
+      "bad_ratio": 0.0,
+      "discrimination": 0.875,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2022_b_1",
+      "type": "归纳概括",
+      "n_points": 3,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2022_b_2",
+      "type": "综合分析",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2022_b_3",
+      "type": "提出对策",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2022_b_4",
+      "type": "应用文",
+      "n_points": 6,
+      "good_ratio": 0.833,
+      "bad_ratio": 0.167,
+      "discrimination": 0.667,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_a_1",
+      "type": "归纳概括",
+      "n_points": 6,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_a_2",
+      "type": "综合分析",
+      "n_points": 5,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.4,
+      "discrimination": 0.6,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_a_3",
+      "type": "应用文",
+      "n_points": 8,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.25,
+      "discrimination": 0.75,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_b_1",
+      "type": "归纳概括",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_b_2",
+      "type": "综合分析",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_b_3",
+      "type": "提出对策",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_c_1",
+      "type": "归纳概括",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_c_2",
+      "type": "综合分析",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2023_c_3",
+      "type": "提出对策",
+      "n_points": 5,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2024_b_1",
+      "type": "归纳概括",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2024_b_2",
+      "type": "综合分析",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2024_b_3",
+      "type": "应用文",
+      "n_points": 10,
+      "good_ratio": 0.9,
+      "bad_ratio": 0.1,
+      "discrimination": 0.8,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2024_c_1",
+      "type": "归纳概括",
+      "n_points": 4,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.25,
+      "discrimination": 0.75,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2024_c_2",
+      "type": "综合分析",
+      "n_points": 5,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2024_c_3",
+      "type": "应用文",
+      "n_points": 9,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.111,
+      "discrimination": 0.889,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2025_a_1",
+      "type": "归纳概括",
+      "n_points": 5,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2025_a_2",
+      "type": "综合分析",
+      "n_points": 5,
+      "good_ratio": 1.0,
+      "bad_ratio": 0.0,
+      "discrimination": 1.0,
+      "bad_fooled": false,
+      "good_leak": false
+    },
+    {
+      "id": "jiangsu_2025_a_3",
+      "type": "应用文",
+      "n_points": 6,
+      "good_ratio": 0.667,
+      "bad_ratio": 0.0,
+      "discrimination": 0.667,
+      "bad_fooled": false,
+      "good_leak": true
+    }
+  ]
+}

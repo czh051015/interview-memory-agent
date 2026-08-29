@@ -1,10 +1,30 @@
-"""复盘报告（07 计划 T5）：行为特征总结 + 复盘报告生成 + markdown 格式化。"""
+"""【已废弃 · docs/18】复盘报告（07 计划 T5）：行为特征总结 + 复盘报告生成 + markdown 格式化。
+
+申论复盘 = 命中/漏点清单（确定性输出），LLM 报告不再需要。本文件保留可导入，
+仅因 Web 模拟面试（app/api/mock.py）仍在引用；新代码不得使用。
+（_BEHAVIOR_PROMPT/_REVIEW_PROMPT 从 prompts.py 内联到本文件，随废弃模块共进退。）
+"""
 
 import logging
 
-from .prompts import _BEHAVIOR_PROMPT, _REVIEW_PROMPT
 # 活引用：LLM 调用一律经包取 chat_json（测试 @patch.object(mi, "chat_json") 才穿透）
 import src.mock as _mi
+
+# ── 面试域 prompt（废弃模块自用，从 prompts.py 内联而来）──
+_BEHAVIOR_PROMPT = (
+    "你是面试官，回顾整场面试，总结候选人的行为特征。只输出 JSON：{\"tags\": [\"标签1\", ...]}\n"
+    "维度（可多个，也可空数组）：答不到点（知识缺口）、表达绕弯（逻辑不清）、回避问题（转移话题）。\n"
+    "只输出确实暴露的问题，没有就输出空数组。"
+)
+
+_REVIEW_PROMPT = (
+    "你是资深面试官，刚面完一位候选人。下面是整场面试的完整记录（题目、逐轮问答、追问理由、最终表现）。\n"
+    "请输出一份复盘报告，要具体、可执行，指出候选人每道题哪里没答到点、为什么、下次怎么改进。\n"
+    "只输出 JSON：\n"
+    '{"overall": "整体评价（2-3句，点出最致命的问题）", '
+    '"items": [{"question": "题", "performance": "pass|partial|fail", "problem": "核心问题", "suggestion": "改进建议"}], '
+    '"common": "共性建议（跨题总结的1-2个系统性问题）"}'
+)
 
 
 def summarize_behaviors(records: list[dict]) -> list[str]:

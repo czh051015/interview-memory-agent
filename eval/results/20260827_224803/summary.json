@@ -1,0 +1,57 @@
+{
+  "run_id": "20260827_224803",
+  "created_at": "20260827_224803",
+  "labels": {
+    "mock_compare": true,
+    "mock_cross": false
+  },
+  "suites": {
+    "retrieval": {
+      "ok": true,
+      "data_count": 65,
+      "recall_at_5": 0.512,
+      "recall_at_10": 0.579,
+      "total_noise": 2
+    },
+    "mock_interview": {
+      "ok": true,
+      "by_mode": {
+        "rubric": {
+          "discrimination_rate": 1.0,
+          "order_ok_rate": 1.0,
+          "strict_order_rate": 0.6364,
+          "no_fool_rate": 1.0,
+          "question_pass_rate": 0.9091
+        },
+        "legacy": {
+          "discrimination_rate": 1.0,
+          "order_ok_rate": 1.0,
+          "strict_order_rate": 0.7273,
+          "no_fool_rate": 1.0,
+          "question_pass_rate": 0.9091
+        },
+        "plain_inject": {
+          "discrimination_rate": 1.0,
+          "order_ok_rate": 1.0,
+          "strict_order_rate": 0.8182,
+          "no_fool_rate": 1.0,
+          "question_pass_rate": 1.0
+        },
+        "rubric_no_ref": {
+          "discrimination_rate": 1.0,
+          "order_ok_rate": 1.0,
+          "strict_order_rate": 0.7273,
+          "no_fool_rate": 1.0,
+          "question_pass_rate": 0.9091
+        }
+      }
+    },
+    "llm_judge": {
+      "ok": true,
+      "decomposed_count": 27,
+      "real_category_accuracy": 0.963,
+      "topic_accuracy": 1.0,
+      "judge_missed": 2
+    }
+  }
+}

@@ -1,8 +1,9 @@
 """面经消化 Agent 单元测试。"""
 
 import pytest
+from unittest.mock import patch
 from src.cleaner.status import infer_status
-from src.cleaner.decompose import has_placeholder
+from src.cleaner.decompose import has_placeholder, decompose
 from src.cleaner.schema import ItemStatus
 
 
@@ -97,3 +98,52 @@ class TestStatusPriority:
     def test_partial_over_pass(self):
         # "答了但漏了" → partial
         assert infer_status("答了但漏了关键点") == ItemStatus.PARTIAL
+
+
+class TestDecomposeAutoStatus:
+    """方案 B：复盘带自评 → LLM 主判 / 规则兜底；纯题目 → UNKNOWN。"""
+
+    def _mock_decompose(self, items, default_status="null"):
+        fake_llm = {
+            "company": "测试公司",
+            "role": "AI应用开发",
+            "round": "一面",
+            "date": "2026-08-27",
+            "default_status": default_status,
+            "items": items,
+        }
+        with patch("src.cleaner.decompose.chat_json", return_value=fake_llm):
+            return decompose("复盘原文（mock）")
+
+    def test_llm_primary_fail(self):
+        # LLM 直接判 fail，user_note 也有自评
+        res = self._mock_decompose([
+            {"question": "RRF原理？", "user_note": "忘了", "status": "fail"}
+        ])
+        assert res.items[0].status == ItemStatus.FAIL
+
+    def test_llm_primary_partial(self):
+        res = self._mock_decompose([
+            {"question": "线程池原理？", "user_note": "答了一半", "status": "partial"}
+        ])
+        assert res.items[0].status == ItemStatus.PARTIAL
+
+    def test_rule_fallback_when_llm_unknown(self):
+        # LLM 返回 unknown，但 user_note 命中规则 → 规则兜底判 partial
+        res = self._mock_decompose([
+            {"question": "混合检索？", "user_note": "答了一半", "status": "unknown"}
+        ])
+        assert res.items[0].status == ItemStatus.PARTIAL
+
+    def test_pure_question_stays_unknown(self):
+        # 纯题目（user_note 空）→ 即便 LLM 给了 status 也不采信，保持 unknown
+        res = self._mock_decompose([
+            {"question": "八股：三次握手？", "user_note": "", "status": "fail"}
+        ])
+        assert res.items[0].status == ItemStatus.UNKNOWN
+
+    def test_no_user_note_unknown_even_if_llm_pass(self):
+        res = self._mock_decompose([
+            {"question": "JVM类加载？", "user_note": "", "status": "pass"}
+        ])
+        assert res.items[0].status == ItemStatus.UNKNOWN

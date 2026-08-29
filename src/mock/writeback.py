@@ -1,8 +1,11 @@
-"""统一面试写回核心 —— CLI 与 Web 共享（06 计划 §3.3 方案 A）。
+"""【已废弃 · docs/18】统一面试写回核心 —— 仅 Web 模拟面试（app/api/mock.py）仍引用。
 
-消除 scripts/run_mock_interview.py 与 app/api/mock.py 的写回逻辑重复 + 行为分叉：
-一次判定（weak 涨跌 / 新题采集 / 行为标签合并 / review_log）抽成单一 apply_verdict 落点。
-反馈写进专用 feedback 字段，不复用 answer（answer 定义为面经自带参考答案）。
+申论练习的写回目标是 reflow_answer（写 answers/answer_rounds/weak_points/events，
+docs/18 §4.4）——CLI 主循环直接调用 src.shenlun.reflow，不经过本模块。
+本文件保留可导入，仅因 Web 模拟面试仍在用；新代码不得使用。
+
+原职责（06 计划 §3.3 方案 A）：一次判定（weak 涨跌 / 新题采集 / 行为标签合并 / review_log）
+抽成单一 apply_verdict 落点。反馈写进专用 feedback 字段，不复用 answer。
 """
 
 from src.cleaner.schema import KnowledgeItem, ItemSource, ItemStatus, utcnow

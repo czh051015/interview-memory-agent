@@ -145,7 +145,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ### 2. 模拟面试（自适应出题 → 判定 → 写回）
 
 - **Web**：「模拟面试」页先上传简历 PDF / JD（`.pdf/.md/.txt`），点开始 → 按章节预览出题计划 → 逐题作答 → 可「追问」（最多 2 轮）→ 结束生成复盘报告。
-- **CLI**：`python scripts/run_mock_interview.py`。中途崩溃？`python scripts/run_mock_interview.py --recover` 幂等补写，掌握度不重复涨。
+- **CLI**：`python -m src.mock`。中途崩溃？`python -m src.mock --recover` 幂等补写，掌握度不重复涨。
 
 出题四层依据：
 

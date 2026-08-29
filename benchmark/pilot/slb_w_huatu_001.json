@@ -1,0 +1,43 @@
+{
+  "id": "slb_w_huatu_001",
+  "province": "样例（W市）",
+  "year": null,
+  "paper": "贯彻执行/应用文·汇报提纲",
+  "type": "贯彻执行",
+  "source": "乐山华图《2022年乐山国考申论批改|得分要点》公开阅卷规则，人工结构化",
+  "question": "上级部门来W市考察，请你根据“给定资料2”，就W市在经济转型升级过程中的探索，写一份汇报提纲。(20分)\n要求：(1)紧扣资料，内容具体;(2)语言流畅，有逻辑性;(3)不超过400字。",
+  "material": null,
+  "material_note": "材料原文未公开（华图在线APP）。本题采分点从『标准答案』反推，标准答案本身依据材料提炼，属 acceptable proxy；理想应 material-grounded，后续补全 material 后重核。",
+  "scoring_criteria": {
+    "method": "按档分类给分（参考样卷，总体关照）。一类14-20基准16；二类7-14基准10；三类7分以下。",
+    "components": {
+      "format_structure": "标题—背景—汇报内容—总结 结构完整",
+      "content": "信息量大、内容全面、紧扣资料、提炼要点",
+      "language": "语言流畅、朴实"
+    },
+    "note": "应用文为分档制，非纯踩点。下方 reference_points 将内容拆为可踩点（content_points），format_checklist 将格式拆为要素清单，以便 benchmark 可验证（recall/no_fool/MAE）。"
+  },
+  "reference_points": [
+    {"id": "c1",  "layer": "一、机器人催生经济新增长", "point": "制定发展机器人产业规划", "keywords": ["规划", "区域发展战略"], "score": 2},
+    {"id": "c2",  "layer": "一", "point": "举办机器人峰会，推动智能制造产业研究院", "keywords": ["机器人峰会", "产业研究院"], "score": 2},
+    {"id": "c3",  "layer": "一", "point": "吸引机器人企业落户", "keywords": ["企业落户"], "score": 1},
+    {"id": "c4",  "layer": "一", "point": "规划建设机器人小镇", "keywords": ["机器人小镇"], "score": 1},
+    {"id": "c5",  "layer": "一", "point": "机器人成为经济新增长点", "keywords": ["新增长点"], "score": 1},
+    {"id": "c6",  "layer": "二、智造引领传统企业改造升级", "point": "机器换人/物联网等新技术智能化改造", "keywords": ["机器换人", "物联网", "智能化改造"], "score": 2},
+    {"id": "c7",  "layer": "二", "point": "提升效率与收益", "keywords": ["效率", "收益"], "score": 1},
+    {"id": "c8",  "layer": "二", "point": "本土系统集成和服务提供商自主创新", "keywords": ["本土服务商", "服务提供商", "自主创新"], "score": 2},
+    {"id": "c9",  "layer": "三、创造辅助生态促进要素发力", "point": "政府与企业互动，创造辅助生态", "keywords": ["辅助生态", "政府互动", "有为之手"], "score": 1},
+    {"id": "c10", "layer": "三", "point": "引进智能经济专家人才", "keywords": ["人才", "专家"], "score": 1},
+    {"id": "c11", "layer": "三", "point": "扶持企业成长，发展智能产业", "keywords": ["扶持企业"], "score": 1},
+    {"id": "c12", "layer": "三", "point": "机器人块状经济发展", "keywords": ["块状经济"], "score": 1}
+  ],
+  "format_checklist": [
+    {"element": "标题正确", "hint": "以…助推… / 关于…汇报提纲", "weight": 1},
+    {"element": "含背景定位", "hint": "点明以机器人产业为核心的智能经济及转型升级目的", "weight": 1},
+    {"element": "含三层面结构", "hint": "一机器人 / 二智能改造 / 三营造生态", "weight": 1},
+    {"element": "含总结", "hint": "收束全文、体现汇报语气", "weight": 1}
+  ],
+  "approved": false,
+  "approved_by": null,
+  "note": "内容点合计 16 分（c1-c12），格式 4 分（4 要素），总分 20。需注意：分档制下并非简单求和，content_hit_ratio 与 format_complete 共同决定档位。待人审：①各点分值分配是否合理；②『制定规划』『服务提供商』应否为独立点（样卷一点评明确指出缺失）；③c11『扶持企业』在样卷二中被合并表述，是否冗余。"
+}

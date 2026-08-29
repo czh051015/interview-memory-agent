@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import chat, dashboard, items, mock, profile, record
+from app.api import chat, dashboard, diagnose, items, mock, profile, record
 
 app = FastAPI(
     title="OfferLoop",
@@ -27,6 +27,7 @@ app.include_router(mock.router, prefix="/api")
 app.include_router(items.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(diagnose.router, prefix="/api")
 
 
 @app.get("/api/health")

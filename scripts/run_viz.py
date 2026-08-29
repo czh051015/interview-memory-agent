@@ -427,7 +427,7 @@ if (trajs.length > 0) {
 } else {
   var tip = document.createElement('p');
   tip.className = 'why';
-  tip.textContent = '（暂无复习事件：先跑 python run_review.py 复习几道题，或 python run_mock_interview.py 面一场，再重跑本脚本）';
+  tip.textContent = '（暂无复习事件：先跑 python run_review.py 复习几道题，或 python -m src.mock 面一场，再重跑本脚本）';
   document.getElementById('chart-traj').appendChild(tip);
 }
 

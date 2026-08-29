@@ -1,0 +1,43 @@
+{
+  "run_id": "baseline",
+  "created_at": "2026-08-27T12:59:00",
+  "labels": {
+    "mock_compare": false,
+    "mock_cross": true
+  },
+  "suites": {
+    "retrieval": {
+      "ok": true,
+      "data_count": 387,
+      "recall_at_5": 0.704,
+      "recall_at_10": 0.763,
+      "total_noise": 0
+    },
+    "mock_interview": {
+      "ok": true,
+      "by_mode": {
+        "rubric": {
+          "discrimination_rate": 1.0,
+          "order_ok_rate": 1.0,
+          "strict_order_rate": 0.6364,
+          "no_fool_rate": 1.0,
+          "question_pass_rate": 0.9091
+        },
+        "rubric_cross": {
+          "discrimination_rate": 1.0,
+          "order_ok_rate": 1.0,
+          "strict_order_rate": 0.7273,
+          "no_fool_rate": 1.0,
+          "question_pass_rate": 1.0
+        }
+      }
+    },
+    "llm_judge": {
+      "ok": true,
+      "decomposed_count": 27,
+      "real_category_accuracy": 0.963,
+      "topic_accuracy": 1.0,
+      "judge_missed": 2
+    }
+  }
+}

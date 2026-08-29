@@ -107,7 +107,7 @@ MockInterviewPage（客户端组件，持有状态机）
 请求：{} （可选：{ n: 5 } 题数）
 响应：{ questions: [{ id, question, topic, status, gap, days }] }
 ```
-- 后端逻辑：复用 `run_mock_interview.get_weak_questions()`（fail+partial → mastery.rank 排序 → top N）
+- 后端逻辑：复用 `src.mock.get_weak_questions()`（fail+partial → mastery.rank 排序 → top N）
 - 为什么单独端点而不是复用 `/chat`：出题是「读库 + rank」的确定性操作，不需要 LLM 语义路由，快且稳。
 
 ### POST `/api/mock/verdict`
@@ -120,7 +120,7 @@ MockInterviewPage（客户端组件，持有状态机）
   reason: "判断理由"
 }
 ```
-- 后端逻辑：复用 `run_mock_interview.get_expected_points()` + `judge_followup()`（去掉 need_followup 分支即单轮）
+- 后端逻辑：复用 `src.mock.get_expected_points()` + `judge_followup()`（去掉 need_followup 分支即单轮）
 - `points` 对应 Q3(a)：LLM 现场生成，零录入负担。
 
 ### 写回（复用时序）
@@ -173,7 +173,7 @@ question ──回答──▶ 追问判断（LLM: need_followup?）
 2. **QuestionStage 支持多轮**：`state.round` 计数，气泡列表变成 `[{interviewer, user} × n]`，轮次上限（MAX_FOLLOWUPS=2）由前端 + 后端双保险
 3. **判定卡复用**：追问结束后进入同一个 VerdictCard，无需新组件
 
-> 为什么 v1.1 改动这么小：CLI 版 `run_mock_interview.py` 已经把追问逻辑做完了（`interview_one` / `judge_followup`），前端 v1 先不接它验证判定可靠度，v1.1 直接把判定的输入换成"多轮拼接后的回答"即可。这不是返工，是故意分两半——先把"LLM 判定准不准"这个地基测了，再盖追问的楼。
+> 为什么 v1.1 改动这么小：CLI 版 `src.mock` 包已经把追问逻辑做完了（`interview_one` / `judge_followup`），前端 v1 先不接它验证判定可靠度，v1.1 直接把判定的输入换成"多轮拼接后的回答"即可。这不是返工，是故意分两半——先把"LLM 判定准不准"这个地基测了，再盖追问的楼。
 
 ---
 

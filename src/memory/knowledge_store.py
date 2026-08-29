@@ -395,6 +395,7 @@ def _to_metadata(item: KnowledgeItem) -> dict:
         "space": item.space or "default",
         "status": item.status.value,
         "user_note": item.user_note[:200],  # 截断
+        "feedback": item.feedback[:4000],  # 面试官反馈，防 Chroma metadata 单值过大
         "category": item.category.value,
         "source": item.source.value,
         "mastery_score": item.mastery_score,
@@ -479,6 +480,7 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
             status=status,
             history=history,
             user_note=meta.get("user_note", ""),
+            feedback=meta.get("feedback", ""),
             mastery_score=float(meta.get("mastery_score", 1.0)),
             review_count=int(meta.get("review_count", 0)),
             source=source,

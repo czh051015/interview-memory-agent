@@ -1,4 +1,9 @@
-"""面试官出题依据：读错题薄弱项 + 读简历/JD（07 计划 T2，从 scripts 原样搬迁）。"""
+"""【已废弃 · docs/18】面试官出题依据：读错题薄弱项 + 读简历/JD（07 计划 T2）。
+
+申论练习不按章节出题（按 ReAct 推荐/题库抽），本文件保留可导入，
+仅因 Web 模拟面试（app/api/mock.py）仍在引用；新代码不得使用。
+（_PLAN_PROMPT 从 prompts.py 内联到本文件，随废弃模块共进退。）
+"""
 
 import logging
 
@@ -6,11 +11,29 @@ import src.config as _cfg  # 活引用：CLI --space 在 import 后改 _cfg.SPAC
 from src.memory import knowledge_store as store
 from src.memory import mastery
 from . import WEAK_POOL_SIZE
-from .prompts import _PLAN_PROMPT
 # 活引用：DATA_DIR / space_dir / chat_json 一律经包取当前属性
 # （测试 monkeypatch 的是 src.mock 包命名空间，如 setattr(mi, "DATA_DIR", tmp_path)；
 # 模块级绑定会缓存旧值，patch 穿透不进来）
 import src.mock as _mi
+
+# ── 面试域 prompt（废弃模块自用，从 prompts.py 内联而来）──
+_PLAN_PROMPT = (
+    "你是资深面试官，为一位候选人设计一场结构化面试。你会收到三份材料：候选人简历、岗位 JD、"
+    "历史薄弱项（候选人面试中答错的题，含 id）。请按固定章节出题，只输出 JSON。\n\n"
+    "输出格式：\n"
+    '{"sections": [{"name": "章节名", "questions": [{"question": "面试题", "source": "来源", "item_id": null, "topic": "主题"}]}]}\n\n'
+    "章节（按顺序，数量固定）：\n"
+    "1. 自我介绍：1 题，开放式破冰。\n"
+    "2. 项目深挖：3 题，从简历项目里挑最值得深挖的，追问实现细节/难点/取舍，查真实性。简历为空则跳过本章。\n"
+    "3. 技术验证：3 题，混合「JD 能力项」和「历史薄弱项」。薄弱项优先用给定错题（item_id 填对应 id，source=weak，question 直接抄错题原文）；JD 能力项现场出题（source=jd，item_id=null）。\n"
+    "4. 行为面：1 题，用 STAR（情境-任务-行动-结果）考察软素质。\n"
+    "5. 动机面：1 题，为什么投这个岗 / 职业规划。\n\n"
+    "记忆管家薄弱主题（如提供）：技术验证章出题时应优先覆盖这些主题。\n\n"
+    "source 取值：generic / resume / jd / weak / behavior / motivation。\n"
+    "item_id 规则（严格）：只有「技术验证」章里、且题目是直接抄错题原文的题，才允许 source=weak 并填对应 item_id；其余所有题（自我介绍/项目深挖/行为面/动机面）source 一律不能是 weak，item_id 一律 null。\n"
+    "topic：每题一个简短主题标签（如 RAG、线程池、项目深挖、职业规划），用于归档。\n"
+    "题目要求：具体、可深挖、贴合候选人材料，不要泛泛的背诵题。"
+)
 
 
 def get_weak_questions(top_k: int = WEAK_POOL_SIZE, space: str | None = None):

@@ -46,6 +46,7 @@ class KnowledgeItem(BaseModel):
     status: ItemStatus = ItemStatus.UNKNOWN
     history: list[dict] = Field(default_factory=list, description="状态变更证据链 [{time,from,to,reason,actor}]")
     user_note: str = Field(default="", description="用户原始备注")
+    feedback: str = Field(default="", description="模拟面试面试官反馈（单题：要点+漏答+评语），来源可追溯，不复用 answer")
     mastery_score: float = Field(default=1.0, ge=0.0, le=1.0)
     last_reviewed_at: Optional[datetime] = None
     review_count: int = 0
@@ -76,3 +77,70 @@ class DecomposeResult(BaseModel):
     unknown_count: int = 0  # status=unknown 的条目数
     total_count: int = 0
     suspected_fail: bool = False  # 整篇"明说栽过"→疑似错题，需用户确认后才标 fail
+
+
+# ── 申论域：标准答案 → 采分点（docs/16 §3.2）──────────────────────────────
+# KnowledgeItem/状态机原样保留服务面试域，申论走新模型（平行新增，不删不改面试代码）。
+# approved 默认 false 是防循环论证的关键：LLM 拆的点 → LLM 判的分，必须人审后才成为可信金标。
+class ReferencePoint(BaseModel):
+    """一个采分点：评分传感器 score_answer() 的比对单元。"""
+    id: str = Field(default="", description="c1/c2/...，入库时按序编号")
+    point: str = Field(..., description="采分点名称，≤8字，如「设施互通」")
+    keywords: list[str] = Field(..., description="比对关键词，须出自标准答案原文/材料原词，2-5 个")
+    score: float = Field(default=0, description="该点分值，人审时可按分比值核对")
+    point_type: str = Field(default="", description="采分角度：问题/原因/影响/对策/意义/危害/其他（docs/13 §5.3，拆解时 LLM 顺手标注，不参与 hit/miss）")
+    approved: bool = Field(default=False, description="人审闸门，默认不通过")
+    source: str = Field(default="llm_draft", description="llm_draft / human_approved / official")
+    history: list[dict] = Field(default_factory=list, description="证据链 [{time,from,to,reason,actor}]，与状态机同构")
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class PointDecomposeResult(BaseModel):
+    """一次「标准答案 → 采分点」拆解的完整输出。"""
+    question_id: str = Field(default="", description="题目 id（入库时用）")
+    question: str = ""
+    requirements: str = ""
+    material: str = ""
+    max_score: int = 0
+    reference_points: list[ReferencePoint] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list, description="LLM 自报的不确定项，人审时优先看")
+
+    @property
+    def approved_count(self) -> int:
+        return sum(1 for p in self.reference_points if p.approved)
+
+    @property
+    def all_approved(self) -> bool:
+        """全部通过 = 整批可入库（任何一条未通过则整批保持草稿）。"""
+        return bool(self.reference_points) and all(p.approved for p in self.reference_points)
+
+
+MAX_POINT_HISTORY = 50  # 证据链上限，与状态机同规格
+
+
+def append_point_history(
+    point: ReferencePoint,
+    *,
+    to_source: str,
+    reason: str,
+    actor: str,
+    from_source: str | None = None,
+    now: datetime | None = None,
+) -> ReferencePoint:
+    """ReferencePoint 留痕（docs/16 §3.5 方案 A：不动 state_machine.py，申论侧小函数）。
+
+    与 KnowledgeItem 状态机同构：证据 {time, from, to, reason, actor}；
+    from/to 存 source（llm_draft → human_approved），出生记录 from=None。
+    返回新对象，不改原 point。
+    """
+    now = now or utcnow()
+    entry = {
+        "time": now.isoformat(),
+        "from": from_source,
+        "to": to_source,
+        "reason": reason,
+        "actor": actor,
+    }
+    history = list(point.history or [])[-(MAX_POINT_HISTORY - 1):]
+    history.append(entry)
+    return point.model_copy(update={"source": to_source, "history": history})

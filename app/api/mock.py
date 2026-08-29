@@ -9,7 +9,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from scripts.run_mock_interview import (
+from src.mock import (
     WEAK_POOL_SIZE,
     get_weak_questions,
     judge_single_round,
@@ -17,17 +17,12 @@ from scripts.run_mock_interview import (
     plan_interview,
     summarize_behaviors,
     _read_profile,
-    _collect_new_item,
-    _feedback_text,
 )
 from src.memory import knowledge_store as store
 from src.memory import mastery
-from src.memory import review_log
-from src.cleaner.schema import ItemStatus
+from src.mock.writeback import apply_verdict
 
 router = APIRouter()
-
-_ACTION_OF = {"pass": "review", "fail": "review_fail", "partial": "review_partial"}
 
 
 # ── 请求/响应模型 ──
@@ -224,93 +219,29 @@ def mock_followup(req: MockFollowupRequest):
 
 @router.post("/mock/complete", response_model=MockCompleteResponse)
 def mock_complete(req: MockCompleteRequest):
-    """写回（对齐 CLI _write_back）：weak 题更新 mastery + 新题答差自动采集。
+    """写回：统一委托共享核心 apply_verdict（CLI/Web 单一落点，06 计划方案 A）。
 
-    - weak（question_id 有值）：mastery.review/review_fail/review_partial + 行为特征合并
-    - 其他来源答 fail/partial：自动采集进错题本（source=mock_interview，留痕）
-    - 失败不会半写：先算完再一次性 store_items
+    - weak 题：mastery 涨跌 + 行为标签合并 + feedback 写专用字段（answer 不动）
+    - 其他来源答 fail/partial：自动采集（feedback=判定文本，answer 留空）
+    - 失败不半写；review_log actor 统一 mock_interview
     """
     if not req.results:
         raise HTTPException(status_code=422, detail="没有要写回的结果")
 
-    updated_items = []
-    records = []  # 行为特征总结的输入
-    for r in req.results:
-        performance = r.verdict
-        if r.source == "weak" and r.question_id:
-            item = store.get_by_id(r.question_id)
-            if item is None:
-                continue  # 题目被删了，跳过（不报错，前端已确认过）
-            if performance == "pass":
-                updated = mastery.review(item)
-            elif performance == "fail":
-                updated = mastery.review_fail(item)
-            else:
-                updated = mastery.review_partial(item)
-            # 反馈写回：fail/partial 时把 LLM 判定追加为答案对照（pass 不需要）
-            if performance in ("fail", "partial") and (r.points or r.misses or r.reason):
-                fb = _feedback_text(performance, {"points": r.points, "misses": r.misses, "reason": r.reason})
-                existing = (item.answer or "").strip()
-                updated = updated.model_copy(
-                    update={"answer": f"{existing}\n\n{fb}" if existing else fb}
-                )
-            updated_items.append(updated)
-            records.append({"question": r.question, "answer": r.answer, "performance": performance})
-
-    # 新题采集：非 weak 来源且答差（fail/partial），自动进错题本（CLI _collect_new_item）
-    new_items = []
-    for r in req.results:
-        if r.source != "weak" and r.verdict in ("fail", "partial"):
-            fb = (
-                _feedback_text(r.verdict, {"points": r.points, "misses": r.misses, "reason": r.reason})
-                if (r.points or r.misses or r.reason)
-                else ""
-            )
-            new_items.append(
-                _collect_new_item(
-                    {
-                        "question": r.question,
-                        "performance": r.verdict,
-                        "topic": r.topic,
-                        "source": r.source,
-                        "feedback": fb,
-                        "space": req.space,  # 跟随当前空间，防漏进 default
-                    }
-                )
-            )
-
     # 整场行为特征总结（LLM，失败返回空数组不阻断写回）
     behaviors = []
     try:
-        behaviors = summarize_behaviors(records)
+        behaviors = summarize_behaviors([
+            {"question": r.question, "answer": r.answer, "performance": r.verdict}
+            for r in req.results
+        ])
     except Exception:
         behaviors = []
 
-    # 合并行为特征到 weak 题
-    final = []
-    for it in updated_items:
-        merged = list(set(it.behavior_tags + behaviors))
-        final.append(it.model_copy(update={"behavior_tags": merged}))
-
-    all_to_store = final + new_items
-    try:
-        stored = store.store_items(all_to_store) if all_to_store else 0
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写库失败：{e}") from e
-
-    # 复习日志（演变动态种子）：只在写库成功后记 weak 题的 mastery 变化
-    after_by_id = {it.id: it for it in final}
-    for r in req.results:
-        if r.source != "weak" or not r.question_id:
-            continue
-        item = store.get_by_id(r.question_id)
-        if item and item.id in after_by_id:
-            u = after_by_id[item.id]
-            review_log.append(
-                item_id=item.id, question=item.question,
-                before=item.mastery_score, after=u.mastery_score,
-                action=_ACTION_OF.get(r.verdict, "review_partial"),
-                actor="mock_interview_web",
-            )
-
-    return MockCompleteResponse(updated=len(final), new=len(new_items), behaviors=behaviors)
+    norm = [{
+        "question": r.question, "source": r.source, "topic": r.topic,
+        "performance": r.verdict, "points": r.points, "misses": r.misses,
+        "reason": r.reason, "item": store.get_by_id(r.question_id), "space": req.space,
+    } for r in req.results]
+    updated, new = apply_verdict(norm, behaviors, space=req.space)
+    return MockCompleteResponse(updated=updated, new=new, behaviors=behaviors)

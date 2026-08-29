@@ -58,11 +58,11 @@ class TestDecomposeResult:
 
 
 class TestDecompose:
-    """拆解管线测试（mock LLM，分流设计：统一 unknown + suspected_fail）。"""
+    """拆解管线测试（mock LLM）：复盘带自评 → 自动判别，纯题目/无备注 → unknown；段级声明 → suspected_fail。"""
 
     @patch("src.cleaner.decompose.chat_json")
-    def test_decompose_all_unknown(self, mock_chat):
-        """分流设计：导入面经不猜 status，全部 unknown 进知识库。"""
+    def test_decompose_auto_status_from_user_note(self, mock_chat):
+        """方案 B：复盘带自评 → 根据 user_note 自动判别 fail/partial/pass。"""
         mock_chat.return_value = {
             "company": "字节",
             "role": "AI应用开发",
@@ -79,9 +79,10 @@ class TestDecompose:
         result = decompose("字节一面：RRF忘了，单例过了")
         assert result.total_count == 2
         assert result.company == "字节"
-        assert result.unknown_count == 2  # 全部 unknown，不再猜 fail/pass
+        assert result.unknown_count == 0  # 有自评 → 全部自动判别，无 unknown
         assert result.suspected_fail is False  # 无段级声明
-        assert all(item.status == ItemStatus.UNKNOWN for item in result.items)
+        assert result.items[0].status == ItemStatus.FAIL   # "忘了" → fail
+        assert result.items[1].status == ItemStatus.PASS   # "过了" → pass
 
     @patch("src.cleaner.decompose.chat_json")
     def test_decompose_suspected_fail(self, mock_chat):

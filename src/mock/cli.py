@@ -1,166 +1,160 @@
-"""CLI 入口（07 计划 T6）：main()。recover 入口在此调用 runtime.recover。"""
+"""申论练习会话 CLI（docs/18 §4.5）：断点 → 抽题 → 练习 → 回流 → 循环。
+
+main() 新流程：
+  1. 读断点（有未完成 → 询问续练 or 重新开始；--recover 直接续练）
+  2. 抽题：react.decide() 推荐优先；失败/无档案 → 题库随机（冷启动降级）
+  3. practice_one() 循环：作答 → 评分 → 逼近 → 达标/上限
+  4. reflow_answer 回流 + answer_rounds 轨迹
+  5. 打印本次命中/漏点清单（确定性复盘，替代 LLM 报告）
+  6. 循环 2-5，直到用户输入退出
+"""
 
 import logging
+import random
+import sys
 
 import src.config as _cfg  # 活引用：CLI --space 在 import 后改 _cfg.SPACE
-from src.config import space_dir
-from src.mock import (
-    get_weak_questions,
-    plan_interview,
-    run_dynamic_session,
-    recover,
-    summarize_behaviors,
-    generate_review_report,
-    _format_review,
-    apply_verdict,
-    _save_progress,
-    _clear_progress,
-    MAX_FOLLOWUPS,
+from src.shenlun.reflow import (
+    reflow_answer, load_question, list_questions, ACTION_ANSWERED,
 )
-from .plan import _read_profile
+from src.shenlun.react import decide
+from src.shenlun.score import from_benchmark
+from src.mock.runtime import (
+    practice_one, _progress_file, _load_practice, _clear_practice,
+)
 
 
-def main():
-    print("=" * 60)
-    print("OfferLoop 模拟面试 · 结构化面试官")
-    print("=" * 60)
-
-    profile = _read_profile(space=_cfg.SPACE)
-    weak_items = get_weak_questions()
-
-    if not profile["resume"] and not profile["jd"] and not weak_items:
-        print("\n⚠️ 没有可面试的材料：")
-        print("   · 简历：把内容贴到 data/resume.md")
-        print("   · 岗位 JD：贴到 data/jd.md")
-        print("   · 错题本：先记几道错题（说「今天面了 X 被问 Y 没答上」）")
-        return
-
-    # 记忆管家：读记忆状态 + 用户画像 → 注入出题（出题靠记忆的闭环）
-    focus_topics: list[str] = []
-    profile_text: str = ""
-    user_profile = None  # 兜底：异常时保持 None，出题不依赖画像
+def _pick_question() -> str | None:
+    """抽题：ReAct 推荐优先；推荐失败/无档案 → 题库随机（docs/18 §4.5 冷启动降级）。"""
     try:
-        from src.memory import memory_keeper as keeper
-        from src.memory import profile as profile_mod
-        keeper_plan = keeper.run(_cfg.SPACE, notify=False)
-        focus_topics = keeper_plan.get("focus_topics") or []
-        # 用户画像（P1）：确定性聚合 + LLM 提炼，空画像降级（冷启动）
-        user_profile = profile_mod.build_profile(_cfg.SPACE, save=True)
-        if user_profile.summary:
-            pass
-        elif not user_profile.empty:
-            user_profile.summary = profile_mod.refine_summary(user_profile)
-            profile_mod._save(user_profile, _cfg.SPACE)
-        profile_text = user_profile.to_prompt_text()
-        if focus_topics:
-            print(f"🧠 记忆管家薄弱主题：{'、'.join(focus_topics)} → 技术验证章优先覆盖")
-        if profile_text:
-            print("📋 已生成用户画像（弱点地图），面试官将据此出题")
+        out = decide()
+        if out.plan and out.plan[0].get("question_id"):
+            return out.plan[0]["question_id"]
     except Exception as e:
-        logging.warning("记忆管家/画像读取失败，继续出题：%s", e)
+        logging.warning("ReAct 抽题失败，题库随机：%s", e)
+    bank = list_questions()
+    if not bank:
+        return None
+    q = random.choice(bank)
+    print(f"（ReAct 无推荐，题库随机：{q['id']} [{q['province']}{q['year']} {q['type']}]）")
+    return q["id"]
 
-    print("\n正在根据 简历 / JD / 错题本 / 用户画像 生成结构化面试...")
-    sections = plan_interview(
-        profile["resume"], profile["jd"], weak_items,
-        focus_topics=focus_topics, profile_text=profile_text,
-    )
 
-    # 展开成章节化题目池（动态循环的「种子题」：每章先用计划题，深挖/换题时现场出）
-    weak_by_id = {it.id: it for it in weak_items}
-    pool_by_section: dict[str, list[dict]] = {}
-    section_order: list[str] = []
-    for sec in sections:
-        name = sec.get("name", "")
-        if not name or not sec.get("questions"):
-            continue
-        section_order.append(name)
-        qs = []
-        for q in sec.get("questions", []):
-            q = dict(q)
-            q["section"] = name
-            # 防御 LLM 标错：weak 题必须「题目 == 错题原文」才绑定 item，否则降级为 generic
-            if q.get("source") == "weak" and q.get("item_id"):
-                item = weak_by_id.get(q.get("item_id"))
-                if item and (q.get("question") or "").strip() == item.question.strip():
-                    q["item"] = item
-                else:
-                    q["item"] = None
-                    q["source"] = "generic"
-            else:
-                q["item"] = None
-            qs.append(q)
-        pool_by_section[name] = qs
+def _ask(question: str, material: str, requirements: str, guidance) -> str:
+    """收作答/补充的 ask_fn。guidance=None 收初稿，否则展示引导收补充。"""
+    if guidance is None:
+        print(f"\n{'=' * 50}\n【题目】{question}\n【要求】{requirements}\n{'=' * 50}")
+        print(f"\n【材料】\n{material}\n")
+        return input("✍️ 写你的作答（回车结束，q 退出）: ").strip()
+    if guidance:
+        print("\n📌 逼近引导（只提示方向，不代写）：")
+        for g in guidance:
+            print(f"   · {g['point']}：{g['hint']}")
+    else:
+        print("\n（本轮无引导——LLM 引导失败，请凭材料再想想）")
+    return input("✍️ 根据提示补充你的作答（回车跳过，q 退出）: ").strip()
 
-    if not section_order:
-        print("⚠️ 出题失败（可能 LLM 没返回计划），请重试。")
-        return
 
-    print(f"\n动态面试：{len(section_order)} 个章节，按表现动态调整题量与深度。每题最多追问 {MAX_FOLLOWUPS} 轮。")
+def _run_one(question_id: str, *, resume_rounds=None):
+    """练一题：practice_one → 回流 + 轨迹 → 返回 (result, item) 供打印复盘。"""
+    item = load_question(question_id)
+    if not item:
+        print(f"⚠️ 题目不存在：{question_id}")
+        return None
+    question = item["task"]["question"]
+    requirements = item["task"].get("requirements", "")
+    material = item["task"]["material"]
+    points = from_benchmark(item["gold"]["reference_points"])
+    print(f"\n【{item['meta']['type']} · {item['meta']['province']}{item['meta']['year']}】")
 
-    # ── 动态智能体循环：选下一题 → 出题 → 等回答 → 追问 → 决策 → 循环 ──
-    _save_progress([], [], [])  # 面试开始：先落盘（动态题会逐步追加）
-    questions, results = run_dynamic_session(
-        section_order, pool_by_section, profile["resume"], profile["jd"], weak_items,
-        ask_fn=lambda _round: input("\n你的回答："),
-        on_save=lambda qs, rs: _save_progress(qs, rs, []),
-        interrupted=True,
-        weak_topics=user_profile.weak_topic_names() if user_profile else None,
-    )
-
-    if not results:
-        print("没有已答的题，本次不保存。")
-        _clear_progress()
-        return
-
-    # ── 总结行为特征 + 写回 ──
-    print("\n" + "=" * 60)
-    print("面试结束，总结行为特征...")
-    behaviors = summarize_behaviors([
-        {"question": r["question"], "answer": r["answer"], "performance": r["performance"]}
-        for r in results
-    ])
-    _save_progress(questions, results, behaviors)  # 总结后落盘（恢复时不重调 LLM）
+    def ask_fn(question, material, guidance):
+        return _ask(question, material, requirements, guidance)
 
     try:
-        apply_verdict(results, behaviors, space=_cfg.SPACE)
-        _clear_progress()  # 写库成功，清掉落盘
-    except Exception as e:
-        logging.warning("写库失败：%s", e)
-        _save_progress(questions, results, behaviors)
-        print("⚠️ 写库失败，结果已存到本地。")
-        print("   稍后重跑 `python -m src.mock --recover` 补写（不会重复涨分）。")
-        return
+        result = practice_one(
+            question_id, question, material, points, ask_fn,
+            progress_path=str(_progress_file()), resume_rounds=resume_rounds,
+        )
+    except (KeyboardInterrupt, EOFError):
+        print("\n⏸ 已保存练习进度，随时重跑 `python -m src.mock` 续练。")
+        raise
 
-    # ── 本场总结 ──
-    print("\n" + "=" * 60)
-    print("📊 本场总结：")
-    for r in results:
-        emoji = {"pass": "✅", "partial": "⚠️", "fail": "❌"}.get(r["performance"], "❓")
-        if r.get("source") == "weak" and r.get("item"):
-            note = "（已更新掌握度）"
-        elif r["performance"] in ("fail", "partial"):
-            note = "（已采集进错题本）"
+    # 回流：终稿入库 + 每轮轨迹 answer_rounds（weak_points 按终稿命中更新）
+    rounds = [
+        {"round_no": r.round_no, "answer": r.answer, "hit_ids": r.hit_ids,
+         "miss_ids": r.miss_ids, "hit_ratio": r.hit_ratio,
+         "guided_point_ids": r.guided_point_ids}
+        for r in result.rounds
+    ]
+    reflow_answer(question_id, item["meta"]["type"], result.final_answer,
+                  item["gold"]["reference_points"], action=ACTION_ANSWERED, rounds=rounds)
+    _clear_practice(str(_progress_file()))  # 本题完成，清断点
+    return result, item
+
+
+def _print_review(result) -> None:
+    """确定性复盘（docs/18 §4.5 步 5）：命中/漏点清单，替代 LLM 报告。"""
+    last = result.rounds[-1]
+    first = result.rounds[0]
+    arrow = f"{first.hit_ratio:.0%} → {last.hit_ratio:.0%}" if len(result.rounds) > 1 else f"{last.hit_ratio:.0%}"
+    status = "✅ 达标" if result.passed else "⚠️ 未达标（已达轮次上限，漏点已入档案）"
+    print(f"\n📊 本题：{status}（命中率 {arrow}，{len(result.rounds)} 轮）")
+    if len(result.rounds) > 1:
+        print(f"   逼近增益：初稿命中 {len(first.hit_ids)} 个点，最终命中 {len(last.hit_ids)} 个点")
+    miss_points = result.rounds[-1].miss_ids
+    if miss_points:
+        print(f"   漏掉采分点：{len(miss_points)} 个（已入薄弱点档案，后续 ReAct 会安排重练/补知识）")
+    else:
+        print("   采分点全部命中，无漏点。")
+
+
+def main(*, recover: bool = False) -> None:
+    """练习会话主循环。recover=True：有断点直接续练，不询问（--recover 参数语义）。"""
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # Windows GBK 控制台打 emoji 会崩（同 run_shenlun）
+    except Exception:
+        pass
+    print("=" * 60)
+    print("OfferLoop 申论练习 · 陪你练（抽题 → 作答 → 逼近 → 回流）")
+    print("=" * 60)
+
+    # 1. 读断点
+    resume_rounds = None
+    first_qid: str | None = None
+    prog = _load_practice(str(_progress_file()))
+    if prog:
+        if recover:
+            resume_rounds = prog["rounds"]
+            first_qid = prog["question_id"]
+            print(f"\n▶ 检测到未完成的练习（{prog['question'][:30]}… 第 {len(prog['rounds'])} 轮），直接续练。")
         else:
-            note = ""
-        print(f"  {emoji} {r['question']}  {note}")
+            try:
+                ans = input("\n▶ 检测到未完成的练习，续练？(y=续练 / n=重新开始) ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                ans = "n"
+            if ans in ("y", "yes", "1", ""):
+                resume_rounds = prog["rounds"]
+                first_qid = prog["question_id"]
+            else:
+                _clear_practice(str(_progress_file()))
+                print("已放弃上次进度，重新开始。")
 
-    if behaviors:
-        print(f"\n🧠 你的行为特征：{', '.join(behaviors)}")
-        print("   （已写入错题本，下次面试前会提醒你注意）")
-    else:
-        print("\n本次未发现明显行为问题。")
-
-    # ── 复盘报告 ──
-    report = generate_review_report(results, behaviors)
-    if report:
-        text = _format_review(report)
-        print("\n" + text)
-        # 落盘复盘报告，供 offerloop「看复盘」事后查阅
+    # 2-6. 练习循环
+    while True:
+        qid = first_qid or _pick_question()
+        first_qid = None
+        if qid is None:
+            print("⚠️ 题库为空（benchmark/data 无题目），退出。")
+            return
+        out = _run_one(qid, resume_rounds=resume_rounds)
+        resume_rounds = None  # 断点只用于第一题
+        if out is None:
+            continue
+        _print_review(out[0])
         try:
-            (space_dir() / "last_review.md").write_text(text, encoding="utf-8")
-        except Exception as e:
-            logging.warning("复盘报告落盘失败：%s", e)
-    else:
-        print("\n（复盘报告生成失败）")
-
-    print("\n完成。可用 python run_remind.py --notify 查看后续提醒。")
+            more = input("\n继续练下一题？(回车继续，q 退出) ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            more = "q"
+        if more in ("q", "quit", "exit", "x"):
+            print("👋 本次练习结束。漏点已入档案，随时回来续练。")
+            return

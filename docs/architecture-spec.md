@@ -150,7 +150,7 @@ importance = STATUS_IMPORTANCE[status] × gap     # gap = 1 - effective_mastery
 **为什么分层**：拆解是 LLM 语义活，去重/入库是确定性活，分开才能单测、才能降级。
 
 ### 链路 B：模拟面试（自适应出题 → 判定 → 写回）
-`run_mock_interview.py` + `app/api/mock.py`（Web 对齐 CLI）
+`src/mock/` 包 + `app/api/mock.py`（Web 对齐 CLI）
 1. **`/mock/start`**：读 `data/resume.md` + `jd.md` + 薄弱题池 → `plan_interview` 生成章节计划（自我介绍 / 项目深挖 / 技术验证 / 行为面 / 动机面）。每题带 `section` + `source` + `item_id`（错题带 gap）。
 2. **`/mock/verdict`**：每答一题 → `judge_single_round` 给 points/misses/判定；可"追问"（≤2 轮，`judge_followup`）。
 3. **`/mock/complete`**：

@@ -1,4 +1,10 @@
-"""判卷（07 计划 T4）：期望要点、追问判断、单轮判定。从 scripts 原样搬迁。"""
+"""【已废弃 · docs/18】判卷（07 计划 T4）：期望要点、追问判断、单轮判定。
+
+判定职责已被确定性评分 score_answer（src/shenlun/score.py）+ 逼近引导 prompt
+（src/mock/prompts.py._APPROACH_PROMPT，LLM 只做提示不做判断）取代。
+本文件保留可导入，仅因 Web 模拟面试（app/api/mock.py）仍在引用；新代码不得使用。
+（面试域 prompt 从 prompts.py 内联到本文件，随废弃模块共进退。）
+"""
 
 import logging
 
@@ -7,12 +13,59 @@ import logging
 # 测试 patch 壳属性穿透不进来。统一经 _mi 取壳当前属性，patch 才能生效。
 import src.mock as _mi  # 活引用：LLM 调用一律经包取 chat_json（测试 patch 包属性才穿透）
 
-from .prompts import (
-    _EXPECTED_POINTS_PROMPT,
-    _FOLLOWUP_PROMPT,
-    _RUBRIC_FOLLOWUP_PROMPT,
-    _SINGLE_JUDGE_PROMPT,
-    _RUBRIC_SINGLE_PROMPT,
+# ── 面试域 prompt（废弃模块自用，从 prompts.py 内联而来）──
+_EXPECTED_POINTS_PROMPT = (
+    "你是一位严格的面试官。下面是一道面试题，请列出候选人「应该答到的关键点」。\n"
+    "要求：只输出 JSON，格式 {\"points\": [\"要点1\", \"要点2\", ...]}，3-5 个要点，每个一句话。"
+)
+
+_FOLLOWUP_PROMPT = (
+    "你是一位严格的面试官，正在考察候选人。你会收到：面试题、期望要点、候选人的回答。\n"
+    "任务：判断是否追问，并评价表现。只输出 JSON：\n"
+    "{\"need_followup\": true/false, \"followup_question\": \"追问问题\", "
+    "\"reason\": \"判断依据\", \"performance\": \"pass\"|\"partial\"|\"fail\"}\n"
+    "标准：覆盖大部分要点且条理清晰→pass 不再追问；漏关键点或含糊→partial 追问；明显不会或跑题→fail。\n"
+    "追问要具体、往下钻，围绕候选人回答里的细节/数字/取舍往下问（可追问情境-任务-行动-结果），不要泛泛地问。"
+)
+
+_RUBRIC_FOLLOWUP_PROMPT = (
+    "你是一位严格的面试官，正在依据固定评分量规考察候选人。你会收到：面试题、期望要点（可能为无）、候选人的回答。\n"
+    "评分量规（四个维度，判定必须逐维对照，判断依据必须引用回答原文）：\n"
+    "1. 正确性：核心事实与原理是否准确，有无硬伤；\n"
+    "2. 完整性：是否覆盖期望要点中的关键点（无期望要点时，自行判断这道题应包含哪些关键点）；\n"
+    "3. 深度：是否讲清机制/细节/取舍，而非泛泛而谈；\n"
+    "4. 表达：结构是否清晰，是否答非所问。\n"
+    "只输出 JSON：\n"
+    '{"need_followup": true/false, "followup_question": "追问问题", '
+    '"reason": "判断依据（必须引用原文，如：回答只说「…」未提「…」）", "performance": "pass"|"partial"|"fail"}\n'
+    "判定标准：四维均达标→pass 不再追问；1-2 个维度不足→partial 追问；存在事实错误或大段缺失→fail。\n"
+    "追问要具体、往下钻，围绕回答里的细节/数字/取舍，不要泛泛地问。"
+)
+
+_SINGLE_JUDGE_PROMPT = (
+    "你是一位严格的面试官，正在考察候选人。你会收到：面试题、候选人的回答。\n"
+    "任务：判定回答质量，并给候选人对照。只输出 JSON：\n"
+    '{"points": ["应该答到的要点1", "要点2", ...], '
+    '"misses": ["回答里漏掉的点1", ...], '
+    '"suggested": "pass"|"partial"|"fail", '
+    '"reason": "一句判断依据"}\n'
+    "标准：覆盖大部分要点且条理清晰→pass；漏关键点或含糊→partial；明显不会或跑题→fail。\n"
+    "points 给 3-5 个（这道题应该答到什么），misses 只列确实漏掉/答错的（0-3 个，没有就给空数组）。\n"
+    "reason 一句话，指出最致命的差距。"
+)
+
+_RUBRIC_SINGLE_PROMPT = (
+    "你是一位严格的面试官，正在依据固定评分量规考察候选人。你会收到：面试题、参考答案要点（可能为无）、候选人的回答。\n"
+    "评分量规（四个维度，判定必须逐维对照，misses 必须引用回答原文作为证据）：\n"
+    "1. 正确性：核心事实与原理是否准确，有无硬伤；\n"
+    "2. 完整性：是否覆盖参考答案要点中的关键点（无参考答案时，自行判断这道题应包含哪些关键点）；\n"
+    "3. 深度：是否讲清机制/细节/取舍，而非泛泛而谈；\n"
+    "4. 表达：结构是否清晰，是否答非所问。\n"
+    "只输出 JSON：\n"
+    '{"points": ["应该答到的要点1", ...], "misses": ["漏掉/答错的点，必须引用原文，如：回答只说「…」未提「…」", ...], '
+    '"suggested": "pass"|"partial"|"fail", "reason": "依据量规的一句判断"}\n'
+    "判定标准：四维均达标→pass；1-2 个维度明显不足→partial；存在事实错误或大段缺失→fail。\n"
+    "points 给 3-5 个，misses 只列确实漏掉/答错的（0-3 个，没有就给空数组）。"
 )
 
 

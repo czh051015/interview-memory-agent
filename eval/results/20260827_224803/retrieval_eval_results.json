@@ -1,0 +1,103 @@
+{
+  "data_count": 65,
+  "annotated_queries": 20,
+  "recall_at_k": [
+    {
+      "k": 1,
+      "recall_at_k": 0.2,
+      "precision_at_k": 0.5,
+      "total_noise": 0
+    },
+    {
+      "k": 2,
+      "recall_at_k": 0.304,
+      "precision_at_k": 0.4,
+      "total_noise": 1
+    },
+    {
+      "k": 3,
+      "recall_at_k": 0.429,
+      "precision_at_k": 0.383,
+      "total_noise": 1
+    },
+    {
+      "k": 4,
+      "recall_at_k": 0.463,
+      "precision_at_k": 0.312,
+      "total_noise": 1
+    },
+    {
+      "k": 5,
+      "recall_at_k": 0.512,
+      "precision_at_k": 0.28,
+      "total_noise": 2
+    },
+    {
+      "k": 6,
+      "recall_at_k": 0.529,
+      "precision_at_k": 0.242,
+      "total_noise": 2
+    },
+    {
+      "k": 7,
+      "recall_at_k": 0.542,
+      "precision_at_k": 0.214,
+      "total_noise": 2
+    },
+    {
+      "k": 8,
+      "recall_at_k": 0.55,
+      "precision_at_k": 0.194,
+      "total_noise": 3
+    },
+    {
+      "k": 9,
+      "recall_at_k": 0.562,
+      "precision_at_k": 0.178,
+      "total_noise": 4
+    },
+    {
+      "k": 10,
+      "recall_at_k": 0.579,
+      "precision_at_k": 0.165,
+      "total_noise": 4
+    }
+  ],
+  "pr_curve": [
+    {
+      "threshold": 0.3,
+      "precision": 0.165,
+      "recall": 0.611
+    },
+    {
+      "threshold": 0.35,
+      "precision": 0.166,
+      "recall": 0.611
+    },
+    {
+      "threshold": 0.4,
+      "precision": 0.177,
+      "recall": 0.611
+    },
+    {
+      "threshold": 0.45,
+      "precision": 0.216,
+      "recall": 0.611
+    },
+    {
+      "threshold": 0.5,
+      "precision": 0.305,
+      "recall": 0.537
+    },
+    {
+      "threshold": 0.55,
+      "precision": 0.583,
+      "recall": 0.519
+    },
+    {
+      "threshold": 0.6,
+      "precision": 0.724,
+      "recall": 0.389
+    }
+  ]
+}

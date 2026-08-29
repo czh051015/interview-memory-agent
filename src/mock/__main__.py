@@ -1,6 +1,7 @@
 """CLI 直跑入口：python -m src.mock [--space X] [--recover]。
 
-承接原 scripts/run_mock_interview.py 的直跑语义（Phase 3 删壳后）。
+--space   记忆空间（活引用改 _cfg.SPACE）
+--recover 有未完成练习直接续练，不询问（docs/18 断点续练语义）
 """
 
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import src.config as _cfg  # --space 在 __main__ 里改 _cfg.SPACE（活引用）
-from src.mock import main, recover
+from src.mock import main
 
 
 if __name__ == "__main__":
@@ -19,6 +20,6 @@ if __name__ == "__main__":
         if idx < len(sys.argv):
             _cfg.SPACE = sys.argv[idx]
     if "--recover" in sys.argv:
-        recover()
+        main(recover=True)
     else:
         main()

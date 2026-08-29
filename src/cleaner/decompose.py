@@ -12,10 +12,22 @@ import re
 import uuid
 from datetime import datetime
 
+from pydantic import ValidationError
+
 from src.llm import chat_json
-from src.cleaner.prompts import DECOMPOSE_SYSTEM
-from src.cleaner.schema import KnowledgeItem, ItemStatus, ItemCategory, DecomposeResult, utcnow
+from src.cleaner.prompts import DECOMPOSE_SYSTEM, SHENLUN_DECOMPOSE_SYSTEM
+from src.cleaner.schema import (
+    KnowledgeItem,
+    ItemStatus,
+    ItemCategory,
+    DecomposeResult,
+    ReferencePoint,
+    PointDecomposeResult,
+    append_point_history,
+    utcnow,
+)
 from src.cleaner.state_machine import record_birth
+from src.cleaner.status import infer_status
 from src.memory.mastery import INITIAL_MASTERY
 
 logger = logging.getLogger(__name__)
@@ -75,8 +87,15 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
 
         user_note = (item_data.get("user_note") or "").strip()
 
-        # 分流设计：不再逐题猜 status，一律 unknown，等用户手动标错题
-        final_status = ItemStatus.UNKNOWN
+        # 有自评信号（user_note 非空）→ LLM 主判，规则兜底；纯题目/无备注 → unknown 等手动标
+        if user_note:
+            llm_status = (item_data.get("status") or "").strip()
+            if llm_status in {"fail", "partial", "pass"}:
+                final_status = ItemStatus(llm_status)
+            else:
+                final_status = infer_status(user_note)
+        else:
+            final_status = ItemStatus.UNKNOWN
 
         # 解析 category（ISSUES F2）
         cat_raw = (item_data.get("category") or "knowledge").strip()
@@ -122,7 +141,112 @@ def decompose(raw_text: str, *, max_tokens: int = 4096) -> DecomposeResult:
         date=(result.get("date") or "").strip(),
         items=items,
         raw_text=raw_text,
-        unknown_count=len(items),
+        unknown_count=sum(1 for it in items if it.status == ItemStatus.UNKNOWN),
         total_count=len(items),
         suspected_fail=suspected_fail,
+    )
+
+
+# ── 申论域：标准答案 → 采分点（docs/16 §3.3）───────────────────────────────
+# 复用骨架：chat_json 调用 / 异常兜底（LLM 挂了返回空结果而非崩溃）/ 长度截断。
+# 删除点：status 推断、category 分类、mastery 初始化、占位符正则——全是面试域的，申论不需要。
+def decompose_points(
+    standard_answer: str,
+    *,
+    question: str = "",
+    requirements: str = "",
+    material: str = "",
+    max_score: int = 0,
+    question_id: str = "",
+    max_tokens: int = 4096,
+) -> PointDecomposeResult:
+    """把申论标准答案拆成采分点（ReferencePoint[]，默认 approved=False）。
+
+    流程：
+    1. 调 LLM（SHENLUN_DECOMPOSE_SYSTEM，温度 0）拆点
+    2. pydantic 校验输出——单条失败记 warnings，不整体崩
+    3. 组装 PointDecomposeResult（approved=False, source="llm_draft"）
+    4. 每点留出生证据（from=null，actor="decompose_points"）
+    5. 返回结果——不写库！写库是 annotate_points 人审通过后的事
+
+    Args:
+        standard_answer: 标准答案全文（拆点对象）
+        question/requirements/material: 题目语境，拆点需要，否则会拆出答非所问的点
+        max_score: 题目满分，LLM 按它分配各点分值
+        question_id: 题目 id（入库时用，留空则后续填）
+
+    Returns:
+        PointDecomposeResult（reference_points + warnings）
+    """
+    logger.info("Decomposing standard answer into points (%d chars)", len(standard_answer))
+
+    user_prompt = (
+        f"## 题目\n{question}\n\n"
+        f"## 要求\n{requirements}\n\n"
+        f"## 材料（给定资料）\n{material[:6000]}\n\n"
+        f"## 题目满分\n{max_score}\n\n"
+        f"## 标准答案\n{standard_answer[:6000]}"
+    )
+
+    try:
+        result = chat_json(
+            system_prompt=SHENLUN_DECOMPOSE_SYSTEM,
+            user_prompt=user_prompt,
+            temperature=0.0,
+            max_tokens=max_tokens,
+        )
+    except Exception as e:
+        logger.error("Decompose points LLM call failed: %s", e)
+        return PointDecomposeResult(
+            question_id=question_id,
+            question=question,
+            requirements=requirements,
+            material=material,
+            max_score=max_score,
+        )
+
+    # pydantic 校验：单条失败 → warnings 记录，不整体崩
+    points: list[ReferencePoint] = []
+    warnings: list[str] = []
+    now = utcnow()
+    raw_points = result.get("reference_points") or []
+    for i, p_data in enumerate(raw_points, 1):
+        try:
+            rp = ReferencePoint(
+                id=f"c{len(points) + 1}",  # 只对成功的点连续编号，跳过的不占号
+                point=(p_data.get("point") or "").strip(),
+                keywords=[str(k).strip() for k in (p_data.get("keywords") or []) if str(k).strip()],
+                score=float(p_data.get("score") or 0),
+                point_type=(p_data.get("point_type") or "").strip(),
+                created_at=now,
+            )
+        except (ValidationError, TypeError, ValueError) as e:
+            warnings.append(f"第 {i} 个采分点校验失败，已跳过: {e}")
+            continue
+        # 出生证据：由 LLM 拆解生成，待人工审核
+        points.append(append_point_history(
+            rp,
+            to_source="llm_draft",
+            reason="由 LLM 拆解生成，待人工审核",
+            actor="decompose_points",
+            now=now,
+        ))
+
+    warnings.extend(str(w) for w in (result.get("warnings") or []) if w)
+
+    if not points:
+        warnings.append("未拆出任何采分点，请检查标准答案是否完整")
+    elif len(points) < 2:
+        warnings.append("疑似标答过简，拆出的点过少，建议更换标准答案")
+
+    logger.info("Decomposed points: %d (approved: 0, warnings: %d)", len(points), len(warnings))
+
+    return PointDecomposeResult(
+        question_id=question_id,
+        question=question,
+        requirements=requirements,
+        material=material,
+        max_score=max_score,
+        reference_points=points,
+        warnings=warnings,
     )

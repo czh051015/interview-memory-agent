@@ -26,7 +26,7 @@ from src.cleaner.decompose import decompose
 from src.cleaner.schema import ItemStatus, KnowledgeItem, utcnow
 from src.memory import knowledge_store as store
 from src.memory.mastery import layer, _elapsed_days
-import scripts.run_mock_interview as mock
+import src.mock as mock
 
 # ── 意图路由 ──
 _ROUTER_PROMPT = (
