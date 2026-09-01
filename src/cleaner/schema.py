@@ -47,6 +47,12 @@ class KnowledgeItem(BaseModel):
     history: list[dict] = Field(default_factory=list, description="状态变更证据链 [{time,from,to,reason,actor}]")
     user_note: str = Field(default="", description="用户原始备注")
     feedback: str = Field(default="", description="模拟面试面试官反馈（单题：要点+漏答+评语），来源可追溯，不复用 answer")
+    # ── 申论示证错题本扩展字段（docs/22 §3.6，reflow/提醒要用；面试域条目留空）──
+    question_id: str = Field(default="", description="申论题目 id（如 henan_2025_city_1）")
+    point_id: str = Field(default="", description="申论采分点 id（如 c1）")
+    material_source: str = Field(default="", description="申论漏点材料锚定原话（L3，如「材料第1段：'…'」）")
+    demo_text: str = Field(default="", description="申论示范表述（L2，示证快照）")
+    reflow_tier: str = Field(default="", description="复习档位：红/黄/绿（申论错题本初始红），空=非申论条目")
     mastery_score: float = Field(default=1.0, ge=0.0, le=1.0)
     last_reviewed_at: Optional[datetime] = None
     review_count: int = 0
@@ -89,6 +95,15 @@ class ReferencePoint(BaseModel):
     keywords: list[str] = Field(..., description="比对关键词，须出自标准答案原文/材料原词，2-5 个")
     score: float = Field(default=0, description="该点分值，人审时可按分比值核对")
     point_type: str = Field(default="", description="采分角度：问题/原因/影响/对策/意义/危害/其他（docs/13 §5.3，拆解时 LLM 顺手标注，不参与 hit/miss）")
+    source_snippet: str = Field(
+        default="",
+        description="该采分点对应的标准答案原文片段（docs/24 §4.1，LLM 拆解时摘录，trace 里核验拆点质量用，不入 gold JSON 评分）",
+    )
+    material_source: str | None = Field(
+        default=None,
+        description="材料锚定结果，如「材料3第2段：'建立常态化的考核评估机制…'」（docs/22 §3.1，"
+                    "评卷时把 keywords 回材料句子做重叠度动态算，0 token，不入 gold JSON）",
+    )
     approved: bool = Field(default=False, description="人审闸门，默认不通过")
     source: str = Field(default="llm_draft", description="llm_draft / human_approved / official")
     history: list[dict] = Field(default_factory=list, description="证据链 [{time,from,to,reason,actor}]，与状态机同构")

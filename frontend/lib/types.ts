@@ -158,3 +158,160 @@ export interface DashboardData {
     actor: string;
   }>;
 }
+
+// ── 申论工作台（与后端 app/api/shenlun.py + diagnose.py 对齐，docs/20/22）──
+export interface PracticeStart {
+  question_id: string;
+  question: string;
+  material: string;
+  max_score: number | null;
+  type: string;
+  recommend_reason: string;
+  focus: string;
+  action: string; // practice / graduation_check / intervene
+}
+
+// ── 单题上传模式：内联采分点 + 材料（解题库依赖，docs/22 §3.5）──
+export interface InlinePoint {
+  id: string;
+  point: string;
+  keywords: string[];
+  score: number;
+  point_type: string;
+}
+export interface InlineGold {
+  points: InlinePoint[];
+  material: string;
+  question: string;
+  qtype: string;
+}
+
+export interface PracticeHit {
+  id: string;
+  point: string;
+  score: number;
+  point_type: string;
+  matched_text: string | null; // 命中片段（L1 标红定位）：kw=含词句，semantic=语义相似句，llm=LLM 引用的作答句
+  matched_by?: "kw" | "semantic" | "llm"; // 命中来源（docs/25 语义层 / docs/26 judge 引擎，kw 命中缺省）
+  semantic_score?: number | null; // 语义命中相似度（docs/25，kw 命中为 null）
+}
+export interface PracticeMiss {
+  id: string;
+  point: string;
+  score: number;
+  point_type: string;
+  material_source: string | null; // 材料锚定句（L3 溯源，「材料第X段：'…'」）
+}
+export interface PracticeLeading {
+  point_id: string;
+  point: string;
+  score: number;
+  material_source: string | null;
+}
+
+export interface PracticeSubmit {
+  hit_ratio: number;
+  passed: boolean;
+  hits: PracticeHit[]; // L1 命中
+  misses: PracticeMiss[]; // L1 漏点（每点挂材料原话）
+  leading: PracticeLeading | null; // 推 1 个最该补的漏点（示证式主动，非逼问）
+}
+
+// ── 文字版标准答案自动解析（docs/24 §5.1）：后端 decompose_points 产出 ──
+export interface ParsePoint {
+  id: string; // p1/p2/…
+  point: string;
+  keywords: string[];
+  score: number;
+  point_type: string;
+  source_snippet: string; // 该点对应的标准答案原文片段（核验拆点质量用）
+}
+export interface ParseTrace {
+  standard_answer: string; // 原始答案全文
+  points: ParsePoint[]; // 拆出的采分点（含 source_snippet）
+  warnings: string[];
+}
+export interface ParseResult {
+  points: ParsePoint[];
+  warnings: string[];
+  trace: ParseTrace; // 默认不下发解析细节；?dev=1 时前端展示
+}
+
+// 按需示证（点开某漏点才返回）：L3 材料锚定 + L2 示范 + L4 错因/改法
+export interface GuidanceResult {
+  point_id: string;
+  point: string;
+  material_source: string | null;
+  demo: string; // L2 示范表述
+  cause_type: string; // L4 错因归类：完全没提/写偏/太模糊
+  cause: string; // L4 错因说明
+  fix: string; // L4 具体改法
+}
+
+// 按需讲解（点开某漏点的「追问讲解」按钮）：有界、不生成完整答案（no_full_answer）
+export interface ExplainResult {
+  point_id: string;
+  point: string;
+  material_source: string | null;
+  rephrase: string; // 换一种更口语/更易懂的说法
+  why: string; // 为什么材料这句话能支撑这个点
+  distinguish: string; // 与相邻点的辨析
+}
+
+export interface WrongbookResult {
+  stored: number;
+  item_id: string;
+  point: string;
+}
+
+export interface PracticeRound {
+  round_no: number;
+  answer: string;
+  hit_ids: string[];
+  miss_ids: string[];
+  hit_ratio: number;
+  guided_point_ids: string[];
+}
+
+export interface PracticeComplete {
+  ok: boolean;
+  weak_added: number;
+  answer_id: number | null;
+}
+
+export interface ShenlunRemindEntry {
+  point: string;
+  qtype: string;
+  days: number;
+}
+
+export interface RemindData {
+  graduation_candidates: ShenlunRemindEntry[]; // 毕业考候选（≤2）
+  to_practice: ShenlunRemindEntry[]; // 该练 topK（≤3，按紧急度）
+}
+
+export interface WeakPointItem {
+  point_key: string;
+  label: string;
+  qtype: string;
+  point_type: string;
+  question_id: string;
+  miss_count: number;
+  hit_count: number;
+  consecutive_hits: number;
+  tier: string; // red / yellow / green
+  urgency: number;
+  state: string; // active / graduated / stuck / pinned
+  last_miss_at: string | null;
+}
+
+export interface WeakpointsData {
+  items: WeakPointItem[];
+}
+
+export type AngleStat = { total: number; red: number; miss_sum: number };
+export interface DiagnoseData {
+  by_type: Record<string, AngleStat>;
+  by_angle: Record<string, AngleStat>;
+  total_points: number;
+}

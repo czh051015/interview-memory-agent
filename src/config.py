@@ -41,9 +41,36 @@ CROSS_MODEL = os.getenv("CROSS_MODEL", "deepseek-reasoner")
 CROSS_MODEL_BASE_URL = os.getenv("CROSS_MODEL_BASE_URL", "")  # 空 = 复用 DeepSeek endpoint
 CROSS_MODEL_API_KEY = os.getenv("CROSS_MODEL_API_KEY", "")    # 空 = 复用 DeepSeek key
 
-# ── Ollama (本地嵌入) ──
+# ── Ollama (本地嵌入，记忆检索保留本地，评分语义层可切云端) ──
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "shaw/dmeta-embedding-zh:latest")
+
+# ── SiliconFlow (云端 embedding，评分语义层默认走 api) ──
+SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "")
+SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
+SILICONFLOW_EMBED_MODEL = os.getenv("SILICONFLOW_EMBED_MODEL", "BAAI/bge-m3")
+SCORE_EMBED_BACKEND = os.getenv("SCORE_EMBED_BACKEND", "api")  # api | ollama
+
+# ── 评分引擎选型（docs/26 A/B 对比，docs/31 切换默认）──
+# llm = LLM-as-a-Judge（judge_score，单次约 10s，1 次 LLM 调用）
+# kw  = 确定性两阶段（score_answer，0 token 秒级，兜底/离线）
+SCORE_ENGINE = os.getenv("SCORE_ENGINE", "llm")  # llm | kw
+
+# ── 评分语义匹配层（docs/25 §4 + 26 §7）：阶段2 语义命中阈值 τ ──
+# 关键词硬匹配未中的采分点，与作答分句的 max cosine ≥ τ 即判命中（semantic hit）。
+# 校准值 τ=0.734（eval/calibrate_tau.py）：确定性引擎（引擎A）基线档——fuzzy 漏判率
+#   75%→57%（-18pp），no_fool 红线余量 0.026（稳健），discrimination 0.864（-3.5pp）。
+#   doc 26 §8：dmeta 把套话 bad 簇与真改写簇压进同一相似度区间，40% 目标不可达是
+#   数据事实；τ=0.734 是折中档，引擎选型由 docs/26 A/B 对比（vs LLM-as-a-Judge）决定。
+def _env_float(name: str, default: float) -> float:
+    v = os.getenv(name)
+    try:
+        return float(v) if v is not None else default
+    except ValueError:
+        return default
+
+
+SCORE_SEMANTIC_TAU = _env_float("SCORE_SEMANTIC_TAU", 0.734)
 
 # ── 管道配置 ──
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

@@ -41,7 +41,8 @@ class TestDecomposePoints:
         """正常拆解：approved=False、source=llm_draft、id 按序、出生留痕。"""
         llm_out = {
             "reference_points": [
-                {"point": "六尺巷·化解纠纷", "keywords": ["六尺巷", "土地纠纷", "谦让"], "score": 3},
+                {"point": "六尺巷·化解纠纷", "keywords": ["六尺巷", "土地纠纷", "谦让"], "score": 3,
+                 "source_snippet": "依托“六尺巷”故事化解倪姓、莫姓两户土地纠纷"},
                 {"point": "河长制·治水", "keywords": ["河长", "水质"], "score": 4},
             ],
             "warnings": ["第2点关键词较少，仅供参考"],
@@ -57,6 +58,9 @@ class TestDecomposePoints:
         assert p1.point == "六尺巷·化解纠纷"
         assert p1.keywords == ["六尺巷", "土地纠纷", "谦让"]
         assert p1.score == 3
+        # docs/24 §4.1：source_snippet 透传（trace 核验拆点质量），LLM 没给则空串
+        assert p1.source_snippet == "依托“六尺巷”故事化解倪姓、莫姓两户土地纠纷"
+        assert p2.source_snippet == ""
         # 防循环论证：默认不通过，待人工审核
         assert p1.approved is False
         assert p1.source == "llm_draft"

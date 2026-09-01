@@ -1,32 +1,24 @@
-"""申论练习会话引擎（docs/18）：mock 从「模拟面试官」重定位为「申论练习会话引擎」。
+"""申论练习会话引擎（docs/22）：mock 重定位为「申论示证引擎」。
 
-一句话：**"考察你" → "陪你练"。** 抽题 → 作答 → 评分（score_answer 确定性传感器）
-→ 逼近引导（LLM 只提示漏了什么+去哪里找）→ 回流（reflow_answer + answer_rounds 轨迹）。
-
-CLI：python -m src.mock [--space X] [--recover]
+一句话：**"考你" → "帮你"。** 上传 题干+材料+标准答案+作答 → 评分（score_answer
+确定性传感器）→ L1 命中/漏点列表（每漏点挂材料原话）→ 推 1 个最该补的漏点 + 示证
+→ 用户点开某漏点按需生成 L2(DEMO)+L4(CAUSE)（guidance，LLM 只做示证）。
+不自动循环逼问（旧 practice_one 逼近循环已删除，docs/22 §3.4）。
 
 模块分区：
-  · 练习域（新代码）：runtime.practice_one 逼近循环 + 断点续练（v2 版本化）、
-    cli.main 练习会话主循环、prompts._APPROACH_PROMPT 逼近引导。
+  · 示证域（新代码）：runtime.guidance 按需示证、prompts.{DEMO,CAUSE}_PROMPT。
   · 【废弃域】模拟面试：judge/plan/report/writeback 仍被 Web 版模拟面试
-    （app/api/mock.py）引用，保留可导入但禁止新代码使用；对应逻辑已被
-    score_answer + 逼近引导 + reflow_answer 取代（docs/18）。
+    （app/api/mock.py）引用，保留可导入但禁止新代码使用（docs/18）。
 """
 
-MAX_ROUNDS = 3            # 逼近轮次上限（初稿 + 2 次引导补充；碎片化场景轮次多会拖时间）
 WEAK_POOL_SIZE = 5        # 【废弃域】Web 模拟面试：薄弱项候选池
 
 # ① 常量先绑定（子模块用 `from . import 常量` 已可解析）
 from src.config import DATA_DIR, space_dir  # re-export（测试 mi.DATA_DIR、mi.space_dir 用到）
 from src.llm import chat_json  # re-export：子模块经 _mi.chat_json 活引用，测试 patch 本模块属性才穿透
 
-# ② 练习域（docs/18 新核心）
-from .runtime import (
-    practice_one, PracticeRound, PracticeResult,
-    _progress_file, _save_practice, _load_practice, _clear_practice,
-    PASS_HIT_RATIO, PROGRESS_VERSION,
-)
-from .cli import main
+# ② 示证域（docs/22 新核心）
+from .runtime import guidance, GuidanceResult, PASS_HIT_RATIO
 
 # ③ 【废弃域】模拟面试 Web 版（app/api/mock.py）仍引用，保留可导入
 from .judge import get_expected_points, judge_followup, judge_single_round

@@ -404,6 +404,12 @@ def _to_metadata(item: KnowledgeItem) -> dict:
         "created_at": item.created_at.isoformat() if item.created_at else "",
         "history": json.dumps(item.history, ensure_ascii=False),
         "behavior_tags": json.dumps(item.behavior_tags, ensure_ascii=False),
+        # 申论示证错题本扩展字段（docs/22 §3.6；面试域条目为空串，不干扰现有查询）
+        "question_id": item.question_id,
+        "point_id": item.point_id,
+        "material_source": item.material_source[:400],   # 防 Chroma metadata 单值过大
+        "demo_text": item.demo_text[:400],
+        "reflow_tier": item.reflow_tier,
     }
 
 
@@ -481,6 +487,12 @@ def _parse_results(results: dict) -> list[KnowledgeItem]:
             history=history,
             user_note=meta.get("user_note", ""),
             feedback=meta.get("feedback", ""),
+            # 申论示证错题本扩展字段（老数据无 key → 空串，docs/22 §3.6）
+            question_id=meta.get("question_id", ""),
+            point_id=meta.get("point_id", ""),
+            material_source=meta.get("material_source", ""),
+            demo_text=meta.get("demo_text", ""),
+            reflow_tier=meta.get("reflow_tier", ""),
             mastery_score=float(meta.get("mastery_score", 1.0)),
             review_count=int(meta.get("review_count", 0)),
             source=source,

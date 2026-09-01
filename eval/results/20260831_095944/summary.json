@@ -1,0 +1,47 @@
+{
+  "run_id": "20260831_095944",
+  "created_at": "20260831_095944",
+  "labels": {
+    "llm_calls": 90
+  },
+  "suites": {
+    "score": {
+      "ok": true,
+      "data_count": 36,
+      "n_points": 213,
+      "mean_discrimination": 0.899,
+      "no_fool": 1.0,
+      "per_type": {
+        "应用文": 0.788,
+        "综合分析": 0.951,
+        "归纳概括": 0.929,
+        "提出对策": 1.0
+      },
+      "good_leak_count": 1,
+      "bad_fooled_ids": []
+    },
+    "decompose": {
+      "ok": true,
+      "decomposed_count": 36,
+      "point_recall": 0.878,
+      "fabrication_rate": 0.064,
+      "structural_ok": 0.963,
+      "score_deviation_mean": 0.008,
+      "over_split_flags": [],
+      "dirty_robustness": 1.0,
+      "calibrated": false
+    },
+    "demo": {
+      "ok": true,
+      "sample_count": 19,
+      "material_anchored": 1.0,
+      "anchored_coverage": 0.687,
+      "no_full_answer": 1.0,
+      "no_fabrication": 1.0,
+      "leading_ok": 1.0,
+      "hit_snippet_ok": 1.0,
+      "demo_generated": 19,
+      "empty_demo_count": 0
+    }
+  }
+}

@@ -1,7 +1,7 @@
 """run_evals 纯函数单测：extract_summary / build_comparison / first_run_md / .latest 指针。
 
 docs/19 §7：保留纯函数测试框架（extract_summary / build_comparison 不依赖 subprocess），
-字段全换成申论域三套件（score / decompose / guidance），并新增方向断言。
+字段全换成申论域四套件（score / decompose / demo / medium，docs/22 §6 + docs/24 接入后），并新增方向断言。
 """
 
 import json
@@ -9,11 +9,13 @@ import sys
 from pathlib import Path
 
 from scripts.run_evals import (
+    HEADLINE,
     LATEST_POINTER,
-    extract_summary,
-    build_comparison,
-    first_run_md,
+    SUITES,
     _read_latest,
+    build_comparison,
+    extract_summary,
+    first_run_md,
 )
 
 
@@ -52,15 +54,36 @@ def _min_decompose(recall=0.85, fab=0.05, n=36, dirty=1.0, calls=52):
     }
 
 
-def _min_guidance(spoiler=1.0, fab=1.0, grounded=0.9, samples=19, calls=27):
+def _min_medium(fuzzy=0.40, nosrc=0.20, samples=9):
+    """docs/24 接入：中间态两档（fuzzy 漏判率 / nosource 假阳性率，方向 ↓）。"""
     return {
         "summary": {
             "sample_count": samples,
-            "no_spoiler": spoiler,
+            "fuzzy_n": 6,
+            "fuzzy_total_exp": 30,
+            "fuzzy_total_fn": 12,
+            "fuzzy_miss_rate": fuzzy,
+            "nosource_n": 3,
+            "nosource_total_sys": 15,
+            "nosource_total_fp": 3,
+            "nosource_fp_rate": nosrc,
+            "llm_calls": 0,
+        }
+    }
+
+
+def _min_demo(full=1.0, fab=1.0, anchored=1.0, samples=19, calls=38):
+    return {
+        "summary": {
+            "sample_count": samples,
+            "material_anchored": anchored,
+            "anchored_coverage": 0.95,
+            "no_full_answer": full,
             "no_fabrication": fab,
-            "hint_grounded": grounded,
-            "judge_score": {"mean": 4.2, "samples": 8},
-            "empty_guidance_count": 0,
+            "leading_ok": 1.0,
+            "hit_snippet_ok": 1.0,
+            "demo_generated": 19,
+            "empty_demo_count": 0,
             "llm_calls": calls,
         }
     }
@@ -70,7 +93,7 @@ def _full_summary():
     return {
         "run_id": "20260829_120000",
         "created_at": "2026-08-29T12:00:00",
-        "labels": {"llm_calls": 79},
+        "labels": {"llm_calls": 90},
         "suites": {
             "score": {"ok": True, "data_count": 36, "n_points": 209,
                       "mean_discrimination": 0.899, "no_fool": 1.0,
@@ -79,9 +102,12 @@ def _full_summary():
                           "fabrication_rate": 0.05, "structural_ok": 1.0,
                           "score_deviation_mean": 0.12, "over_split_flags": [],
                           "dirty_robustness": 1.0, "calibrated": False},
-            "guidance": {"ok": True, "sample_count": 19, "no_spoiler": 1.0,
-                         "no_fabrication": 1.0, "hint_grounded": 0.9,
-                         "judge_score_mean": 4.2, "empty_guidance_count": 0},
+            "demo": {"ok": True, "sample_count": 19, "material_anchored": 1.0,
+                     "anchored_coverage": 0.95, "no_full_answer": 1.0,
+                     "no_fabrication": 1.0, "leading_ok": 1.0, "hit_snippet_ok": 1.0,
+                     "demo_generated": 19, "empty_demo_count": 0},
+            "medium": {"ok": True, "sample_count": 9, "fuzzy_n": 6,
+                       "fuzzy_miss_rate": 0.40, "nosource_n": 3, "nosource_fp_rate": 0.20},
         },
     }
 
@@ -105,26 +131,48 @@ class TestExtractSummary:
         assert s["decomposed_count"] == 36
         assert s["dirty_robustness"] == 1.0
 
-    def test_guidance_fields(self, tmp_path):
-        _write(tmp_path, "guidance_eval_results.json", _min_guidance(spoiler=0.95, grounded=0.9))
-        s = extract_summary(tmp_path)["suites"]["guidance"]
+    def test_demo_fields(self, tmp_path):
+        _write(tmp_path, "demo_eval_results.json", _min_demo(full=0.95, anchored=1.0))
+        s = extract_summary(tmp_path)["suites"]["demo"]
         assert s["ok"]
-        assert s["no_spoiler"] == 0.95
+        assert s["no_full_answer"] == 0.95
+        assert s["material_anchored"] == 1.0
         assert s["no_fabrication"] == 1.0
-        assert s["hint_grounded"] == 0.9
-        assert s["judge_score_mean"] == 4.2
+        assert s["leading_ok"] == 1.0
+
+    def test_medium_fields(self, tmp_path):
+        _write(tmp_path, "medium_eval_results.json", _min_medium(fuzzy=0.35, nosrc=0.25))
+        s = extract_summary(tmp_path)["suites"]["medium"]
+        assert s["ok"]
+        assert s["sample_count"] == 9
+        assert s["fuzzy_miss_rate"] == 0.35
+        assert s["nosource_fp_rate"] == 0.25
+        assert s["fuzzy_n"] == 6 and s["nosource_n"] == 3
 
     def test_llm_calls_aggregated(self, tmp_path):
         _write(tmp_path, "decompose_eval_results.json", _min_decompose(calls=52))
-        _write(tmp_path, "guidance_eval_results.json", _min_guidance(calls=27))
-        assert extract_summary(tmp_path)["labels"]["llm_calls"] == 79
+        _write(tmp_path, "demo_eval_results.json", _min_demo(calls=38))
+        assert extract_summary(tmp_path)["labels"]["llm_calls"] == 90
 
     def test_missing_json_marks_fail(self, tmp_path):
         s = extract_summary(tmp_path)
         assert s["suites"]["score"]["ok"] is False
         assert s["suites"]["decompose"]["ok"] is False
-        assert s["suites"]["guidance"]["ok"] is False
-        assert "error" in s["suites"]["guidance"]
+        assert s["suites"]["demo"]["ok"] is False
+        assert s["suites"]["medium"]["ok"] is False
+        assert "error" in s["suites"]["demo"]
+
+
+class TestWiring:
+    """docs/24 接入：SUITES/HEADLINE 条目与 extract_summary 字段必须一致。"""
+
+    def test_medium_suite_wired(self):
+        assert ("medium", "eval/medium_eval.py", "medium_eval_results.json") in SUITES
+
+    def test_medium_headline_wired(self):
+        by_name = {n: (s, p, d) for n, s, p, d in HEADLINE}
+        assert by_name["中间态漏判率（fuzzy）"] == ("medium", "fuzzy_miss_rate", "down")
+        assert by_name["中间态假阳性率（nosource）"] == ("medium", "nosource_fp_rate", "down")
 
 
 class TestBuildComparison:
@@ -156,10 +204,29 @@ class TestBuildComparison:
         md = build_comparison(cur, prev)
         assert "⚠️ 回退" in md
 
+    def test_medium_down_direction(self):
+        """docs/24：fuzzy 漏判率/假阳性率是 ↓ 类指标——下降（Δ<0）才标提升。"""
+        prev = _full_summary()
+        cur = _full_summary()
+        cur["suites"]["medium"]["fuzzy_miss_rate"] = 0.30   # 0.30-0.40=-0.10
+        cur["suites"]["medium"]["nosource_fp_rate"] = 0.10  # 0.10-0.20=-0.10
+        md = build_comparison(cur, prev)
+        assert "中间态漏判率（fuzzy）" in md and "-0.10" in md
+        assert md.count("✅ 提升") >= 2
+        assert "⚠️ 回退" not in md
+
+    def test_medium_down_metric_regression(self):
+        """fuzzy 漏判率上升（Δ>0）必须标回退。"""
+        prev = _full_summary()
+        cur = _full_summary()
+        cur["suites"]["medium"]["fuzzy_miss_rate"] = 0.55
+        md = build_comparison(cur, prev)
+        assert "⚠️ 回退" in md
+
     def test_missing_yields_na(self):
         prev = _full_summary()
         cur = _full_summary()
-        cur["suites"]["guidance"] = {"ok": False, "error": "json 缺失或损坏"}
+        cur["suites"]["demo"] = {"ok": False, "error": "json 缺失或损坏"}
         md = build_comparison(cur, prev)
         assert "N/A" in md
         assert "— 缺失" in md

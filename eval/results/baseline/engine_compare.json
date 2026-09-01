@@ -1,0 +1,26 @@
+{
+  "stats": {
+    "A": {
+      "fuzzy_miss_rate": 0.0,
+      "nosource_fp_rate": 0.35714285714285715,
+      "f1_medium": 0.8441558441558442,
+      "consistency": 1.0,
+      "no_fool": null,
+      "discrimination": null,
+      "llm_calls": 0
+    },
+    "B": {
+      "fuzzy_miss_rate": 0.0,
+      "nosource_fp_rate": 0.35714285714285715,
+      "f1_medium": 0.8441558441558442,
+      "consistency": 1.0,
+      "no_fool": null,
+      "discrimination": null,
+      "llm_calls": 7,
+      "llm_falls": 0
+    }
+  },
+  "elapsed_s": 12.7,
+  "runs": 1,
+  "quick": true
+}

@@ -2,13 +2,22 @@ import type {
   ChatResponse,
   DashboardData,
   DecomposeResult,
+  DiagnoseData,
+  ExplainResult,
+  GuidanceResult,
+  InlineGold,
   KnowledgeItem,
   MockCompleteResponse,
   MockFollowupResponse,
   MockStartResponse,
   MockVerdictResponse,
+  ParseResult,
+  PracticeSubmit,
   ProfileResponse,
   RecordResponse,
+  RemindData,
+  WeakpointsData,
+  WrongbookResult,
 } from "./types";
 
 // 相对路径：next.config.ts 的 rewrites 会把 /api/* 代理到 FastAPI（8000）
@@ -227,4 +236,83 @@ export async function uploadJd(
     throw new Error(err.detail || `HTTP ${res.status}`);
   }
   return res.json();
+}
+
+// ── 申论工作台（docs/20 Step B，照抄 post/get 模式）──
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(path, { cache: "no-store" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "请求失败" }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── 申论单题上传 + 示证（docs/22 §3.5 / 对话迭代 / 有界追问）──
+// 前端无状态：每次调用自带 gold（内联采分点+材料），后端 _resolve 优先用 gold。
+
+// 文字版标准答案 → 采分点（docs/24 §5.1）：纯文字才走此接口（LLM 拆解），
+// JSON 模式不调用。返回的 points 拼 InlineGold 后走原 scorePractice 评分链路。
+export function parsePractice(
+  ctx: { question: string; material: string },
+  standard_answer: string,
+): Promise<ParseResult> {
+  return post<ParseResult>("/api/shenlun/practice/parse", {
+    standard_answer,
+    question: ctx.question,
+    material: ctx.material,
+    max_score: 0,
+  });
+}
+
+export function scorePractice(gold: InlineGold, answer: string): Promise<PracticeSubmit> {
+  return post<PracticeSubmit>("/api/shenlun/practice/submit", { gold, answer });
+}
+
+export function getGuidance(
+  gold: InlineGold,
+  answer: string,
+  point_id: string,
+): Promise<GuidanceResult> {
+  return post<GuidanceResult>("/api/shenlun/practice/guidance", { gold, answer, point_id });
+}
+
+export function getExplain(
+  gold: InlineGold,
+  answer: string,
+  point_id: string,
+): Promise<ExplainResult> {
+  return post<ExplainResult>("/api/shenlun/practice/explain", { gold, answer, point_id });
+}
+
+export function addWrongbook(
+  gold: InlineGold,
+  answer: string,
+  point_id: string,
+  demo: string,
+  cause_type: string,
+  cause: string,
+): Promise<WrongbookResult> {
+  return post<WrongbookResult>("/api/shenlun/wrongbook", {
+    gold,
+    answer,
+    point_id,
+    answer_snippet: "",
+    demo,
+    cause_type,
+    cause,
+  });
+}
+
+export function getRemind(): Promise<RemindData> {
+  return get<RemindData>("/api/shenlun/remind");
+}
+
+export function getWeakpoints(state?: string): Promise<WeakpointsData> {
+  const qs = state ? `?state=${encodeURIComponent(state)}` : "";
+  return get<WeakpointsData>(`/api/shenlun/weakpoints${qs}`);
+}
+
+export function getDiagnose(): Promise<DiagnoseData> {
+  return get<DiagnoseData>("/api/diagnose");
 }

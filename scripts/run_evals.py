@@ -1,12 +1,13 @@
-"""Eval 全套统一入口：串起 3 个申论 eval 套件 + 时间戳归档 + 与上一轮回归对比。
+"""Eval 全套统一入口：串起 4 个申论 eval 套件 + 时间戳归档 + 与上一轮回归对比。
 
 零侵入：只 subprocess 调用并复制结果，不 import 任何一个 eval 模块内部逻辑。
-套件（docs/19 §3 改造后：全申论域）：
+套件（docs/19 §3 改造 + docs/22 §6 换示证后 + docs/24 接入 medium）：
   1. score     评分传感器（确定性，秒级）
   2. decompose 拆解质量（LLM，金标对照 + 脏标答）
-  3. guidance  逼近引导（LLM，红线 + 质量）
+  3. demo      示证 eval（docs/22 §6：L1 材料锚定 + 单点示证，替代旧 guidance）
+  4. medium    中间态档 eval（docs/24：fuzzy 漏判率 + nosource 假阳性率，确定性 0 token）
 用法：
-  python scripts/run_evals.py                 # 跑全部 3 套件 + 归档 + 与上一轮对比
+  python scripts/run_evals.py                 # 跑全部 4 套件 + 归档 + 与上一轮对比
   python scripts/run_evals.py --no-compare    # 跳过对比生成（仅归档）
   python scripts/run_evals.py --baseline      # 快照当前固定 json 为 baseline 锚点（不跑）
   python scripts/run_evals.py --list          # 列出 eval/results/ 下所有 run 及时间
@@ -33,18 +34,21 @@ PY = sys.executable
 SUITES = [
     ("score", "eval/score_eval.py", "score_eval_results.json"),
     ("decompose", "eval/decompose_eval.py", "decompose_eval_results.json"),
-    ("guidance", "eval/guidance_eval.py", "guidance_eval_results.json"),
+    ("demo", "eval/demo_eval.py", "demo_eval_results.json"),
+    ("medium", "eval/medium_eval.py", "medium_eval_results.json"),
 ]
 
-# 6 项 headline 指标：(指标名, 套件, extract 后 summary 里的路径, 方向)
-# 方向 up=越大越好 / down=越小越好（臆造点率、红线类指标是 ↓，delta<0 才算提升）
+# 8 项 headline 指标：(指标名, 套件, extract 后 summary 里的路径, 方向)
+# 方向 up=越大越好 / down=越小越好（臆造点率、红线类、中间态漏判/假阳性率是 ↓，delta<0 才算提升）
 HEADLINE = [
     ("评分 no_fool", "score", "no_fool", "up"),
     ("拆解点覆盖率", "decompose", "point_recall", "up"),
     ("拆解臆造点率", "decompose", "fabrication_rate", "down"),
-    ("引导 no_spoiler", "guidance", "no_spoiler", "up"),
-    ("引导 hint_grounded", "guidance", "hint_grounded", "up"),
+    ("示证 no_full_answer", "demo", "no_full_answer", "up"),
+    ("示证材料锚定", "demo", "material_anchored", "up"),
     ("评分 discrimination", "score", "mean_discrimination", "up"),
+    ("中间态漏判率（fuzzy）", "medium", "fuzzy_miss_rate", "down"),      # 加语义层后应下降
+    ("中间态假阳性率（nosource）", "medium", "nosource_fp_rate", "down"),  # 加材料结合度后应下降
 ]
 
 
@@ -117,20 +121,39 @@ def extract_summary(run_dir: Path) -> dict:
         }
         summary["labels"]["llm_calls"] += sm.get("llm_calls") or 0
 
-    # guidance（docs/19 §4.3）
-    g = _load_json(run_dir / "guidance_eval_results.json")
+    # demo（docs/22 §6 示证 eval，替代旧 guidance）
+    g = _load_json(run_dir / "demo_eval_results.json")
     if g is None:
-        summary["suites"]["guidance"] = {"ok": False, "error": "json 缺失或损坏"}
+        summary["suites"]["demo"] = {"ok": False, "error": "json 缺失或损坏"}
     else:
         sm = g.get("summary", {})
-        summary["suites"]["guidance"] = {
+        summary["suites"]["demo"] = {
             "ok": True,
             "sample_count": sm.get("sample_count"),
-            "no_spoiler": sm.get("no_spoiler"),
-            "no_fabrication": sm.get("no_fabrication"),
-            "hint_grounded": sm.get("hint_grounded"),
-            "judge_score_mean": (sm.get("judge_score") or {}).get("mean"),
-            "empty_guidance_count": sm.get("empty_guidance_count"),
+            "material_anchored": sm.get("material_anchored"),  # L3 锚定有真出处（红线 ==1.0）
+            "anchored_coverage": sm.get("anchored_coverage"),  # 漏点锚定覆盖率（报告项）
+            "no_full_answer": sm.get("no_full_answer"),        # 示范不代写整段（红线 ==1.0）
+            "no_fabrication": sm.get("no_fabrication"),        # 示证不臆造（红线 ==1.0）
+            "leading_ok": sm.get("leading_ok"),                # 推1 = score 最大（报告项）
+            "hit_snippet_ok": sm.get("hit_snippet_ok"),
+            "demo_generated": sm.get("demo_generated"),
+            "empty_demo_count": sm.get("empty_demo_count"),
+        }
+        summary["labels"]["llm_calls"] += sm.get("llm_calls") or 0
+
+    # medium（docs/24 接入：中间态两档——fuzzy 漏判率 / nosource 假阳性率，确定性 0 token）
+    md = _load_json(run_dir / "medium_eval_results.json")
+    if md is None:
+        summary["suites"]["medium"] = {"ok": False, "error": "json 缺失或损坏"}
+    else:
+        sm = md.get("summary", {})
+        summary["suites"]["medium"] = {
+            "ok": True,
+            "sample_count": sm.get("sample_count"),
+            "fuzzy_n": sm.get("fuzzy_n"),
+            "fuzzy_miss_rate": sm.get("fuzzy_miss_rate"),        # 期望给分但系统漏判（↓）
+            "nosource_n": sm.get("nosource_n"),
+            "nosource_fp_rate": sm.get("nosource_fp_rate"),      # 系统命中但人工不该给（↓）
         }
         summary["labels"]["llm_calls"] += sm.get("llm_calls") or 0
 
@@ -170,7 +193,7 @@ def build_comparison(cur: dict, prev: dict) -> str:
     lines += ["", "## 套件状态"]
     for name, _, _ in SUITES:
         s = cur.get("suites", {}).get(name, {})
-        desc = f"（llm_calls={cur.get('labels', {}).get('llm_calls')}）" if name == "guidance" else ""
+        desc = f"（llm_calls={cur.get('labels', {}).get('llm_calls')}）" if name == "demo" else ""
         lines.append(f"- {name}: {'ok' if s.get('ok') else 'fail'}{desc}")
     return "\n".join(lines) + "\n"
 
@@ -212,7 +235,7 @@ def run_all_evals(no_compare: bool) -> int:
     run_dir = RESULTS_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # 3 套件依次跑，任一失败不中断其余
+    # 4 套件依次跑，任一失败不中断其余
     results = {}
     log_lines = []
     for label, rel, jname in SUITES:
@@ -259,8 +282,8 @@ def run_all_evals(no_compare: bool) -> int:
 
 
 def baseline_snapshot() -> int:
-    """登记 baseline：eval 脚本产物直接落在 results/baseline/（3 个 eval 脚本 --out 默认路径），
-    这里只需确认 3 个 json 在位并写 summary.json + 指针。"""
+    """登记 baseline：eval 脚本产物直接落在 results/baseline/（4 个 eval 脚本 --out 默认路径），
+    这里只需确认 4 个 json 在位并写 summary.json + 指针。"""
     target = RESULTS_DIR / "baseline"
     target.mkdir(parents=True, exist_ok=True)
     n = 0

@@ -1,11 +1,17 @@
-"""嵌入管线 —— dmeta-embedding-zh (Ollama) 优先，API 兜底。"""
+"""嵌入管线 —— 记忆检索仍用本地 dmeta；评分语义层可切云端 bge-m3。"""
 
 import logging
 from typing import Optional
 
 import httpx
 
-from src.config import OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL
+from src.config import (
+    OLLAMA_BASE_URL,
+    OLLAMA_EMBED_MODEL,
+    SILICONFLOW_API_KEY,
+    SILICONFLOW_BASE_URL,
+    SILICONFLOW_EMBED_MODEL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +40,37 @@ def embed_ollama(texts: list[str], model: str = OLLAMA_EMBED_MODEL) -> list[list
         resp = httpx.post(
             f"{OLLAMA_BASE_URL}/api/embed",
             json={"model": model, "input": texts},
-            timeout=120,
+            timeout=httpx.Timeout(connect=3.0, read=60.0, write=15.0, pool=3.0),
         )
         resp.raise_for_status()
         data = resp.json()
         return data["embeddings"]
     except Exception as e:
         logger.error("Ollama batch embedding failed: %s", e)
+        raise
+
+
+def embed_api(texts: list[str], model: str = SILICONFLOW_EMBED_MODEL) -> list[list[float]]:
+    """SiliconFlow bge-m3（OpenAI 兼容 /embeddings，批量，评分语义层云端优先）。
+
+    超时拆 connect/read：网络黑洞时快速失败（connect 5s），让 score.embed_zh 的
+    降级链（api→ollama→纯硬匹配）及时触发，不挂死整条评测链路。
+    """
+    if not SILICONFLOW_API_KEY:
+        raise RuntimeError("SILICONFLOW_API_KEY 未配置")
+    try:
+        resp = httpx.post(
+            f"{SILICONFLOW_BASE_URL}/embeddings",
+            json={"model": model, "input": texts},
+            headers={"Authorization": f"Bearer {SILICONFLOW_API_KEY}"},
+            timeout=httpx.Timeout(connect=5.0, read=30.0, write=15.0, pool=5.0),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        ordered = sorted(data.get("data", []), key=lambda x: x["index"])
+        return [item["embedding"] for item in ordered]
+    except Exception as e:
+        logger.error("SiliconFlow embedding failed: %s", e)
         raise
 
 

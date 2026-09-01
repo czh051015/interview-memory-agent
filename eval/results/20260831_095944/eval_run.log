@@ -1,0 +1,102 @@
+===== score (rc=0) =====
+评测题数: 36
+mean discrimination (好答−跑题答命中差): 0.899  （越接近1越强）
+no_fool (跑题答未被误判满分):            1.000  （必须=1.0）
+per-type discrimination: {'应用文': 0.788, '综合分析': 0.951, '归纳概括': 0.929, '提出对策': 1.0}
+  ✅ 无 bad 被误判全命中
+  ⚠️ 1 道 good 命中<0.8(采分点可能标漏): ['jiangsu_2025_a_3']
+
+明细已写: D:\AIWorkspace\OfferLoop\offerloop\eval\results\baseline\score_eval_results.json
+
+===== decompose (rc=0) =====
+  henan_2024_city_1      应用文    金标 8 拆出 6 覆盖0.75 臆造0.00 结构ok
+  henan_2024_city_2      综合分析   金标 5 拆出 5 覆盖1.00 臆造0.00 结构ok
+  henan_2024_city_3      应用文    金标10 拆出12 覆盖0.70 臆造0.08 结构ok
+  henan_2025_city_1      归纳概括   金标 9 拆出 9 覆盖1.00 臆造0.00 结构ok
+  henan_2025_city_2      应用文    金标11 拆出 7 覆盖0.73 臆造0.00 结构ok
+  henan_2025_city_3      综合分析   金标 6 拆出 4 覆盖0.83 臆造0.00 结构ok
+  henan_2025_county_1    归纳概括   金标 5 拆出 5 覆盖1.00 臆造0.00 结构ok
+  henan_2025_county_2    应用文    金标12 拆出11 覆盖0.75 臆造0.09 结构ok
+  henan_2025_county_3    综合分析   金标 7 拆出 7 覆盖1.00 臆造0.00 结构ok
+  henan_2025_county_4    应用文    金标 6 拆出 7 覆盖0.83 臆造0.00 结构ok
+  henan_2025_county_5    归纳概括   金标 6 拆出 5 覆盖0.83 臆造0.00 结构ok
+  jiangsu_2019_b_1       综合分析   金标 3 拆出 3 覆盖0.67 臆造0.33 结构ok
+  jiangsu_2019_b_2       归纳概括   金标 4 拆出 4 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2019_b_3       应用文    金标 8 拆出 7 覆盖0.62 臆造0.29 结构ok
+  jiangsu_2022_b_1       归纳概括   金标 3 拆出 8 覆盖1.00 臆造0.25 结构ok
+  jiangsu_2022_b_2       综合分析   金标 4 拆出 5 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2022_b_3       提出对策   金标 4 拆出 4 覆盖1.00 臆造0.00 结构✗
+  jiangsu_2022_b_4       应用文    金标 6 拆出 5 覆盖0.83 臆造0.00 结构ok
+  jiangsu_2023_a_1       归纳概括   金标 6 拆出 6 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2023_a_2       综合分析   金标 5 拆出 6 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2023_a_3       应用文    金标 8 拆出 8 覆盖0.62 臆造0.38 结构ok
+  jiangsu_2023_b_1       归纳概括   金标 4 拆出 6 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2023_b_2       综合分析   金标 4 拆出 4 覆盖0.50 臆造0.50 结构ok
+  jiangsu_2023_b_3       提出对策   金标 4 拆出 4 覆盖1.00 臆造0.00 结构✗
+  jiangsu_2023_c_1       归纳概括   金标 4 拆出 4 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2023_c_2       综合分析   金标 4 拆出 5 覆盖1.00 臆造0.20 结构ok
+  jiangsu_2023_c_3       提出对策   金标 5 拆出 5 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2024_b_1       归纳概括   金标 4 拆出 4 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2024_b_2       综合分析   金标 4 拆出 8 覆盖1.00 臆造0.12 结构ok
+  jiangsu_2024_b_3       应用文    金标10 拆出 7 覆盖0.60 臆造0.00 结构ok
+  jiangsu_2024_c_1       归纳概括   金标 4 拆出 4 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2024_c_2       综合分析   金标 5 拆出 6 覆盖1.00 臆造0.17 结构ok
+  jiangsu_2024_c_3       应用文    金标 9 拆出 7 覆盖0.67 臆造0.00 结构ok
+  jiangsu_2025_a_1       归纳概括   金标 5 拆出 5 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2025_a_2       综合分析   金标 5 拆出 8 覆盖1.00 臆造0.00 结构ok
+  jiangsu_2025_a_3       应用文    金标 6 拆出 7 覆盖0.67 臆造0.14 结构ok
+  [脏] 残缺 henan_2025_city_1      金标 9 拆出 1 预检['过简（仅 46 字）'] LLM预警✓ → PASS
+  [脏] 残缺 jiangsu_2022_b_3       金标 4 拆出 4 预检['过简（仅 70 字）'] LLM预警✓ → PASS
+  [脏] 口语化 jiangsu_2023_a_1       金标 6 拆出 5 预检["口语化标记（('我觉得', '挺有意思', '嘛') 命中）", '过简（仅 62 字）'] LLM预警✓ → PASS
+  [脏] 口语化 jiangsu_2023_a_2       金标 5 拆出 4 预检["口语化标记（('我觉得', '挺有意思', '嘛') 命中）", '过简（仅 60 字）'] LLM预警✓ → PASS
+  [脏] 抄错 henan_2024_city_2      金标 5 拆出 5 预检['含×乱码符号'] LLM预警✓ → PASS
+  [脏] 抄错 jiangsu_2023_c_3       金标 5 拆出 5 预检['含×乱码符号'] LLM预警· → PASS
+
+裁判抽样复核（漏拆/错拆/臆造）...
+  judge 发现 fabricated: 无
+  judge 发现 missed: 无
+  judge 发现 extra: 无
+
+============================================================
+金标对照题数: 36
+点覆盖率 recall:     0.878  （门槛 ≥ 0.8）
+臆造点率 fabrication: 0.064  （门槛 ≤ 0.1）
+结构合法性:           0.963  （门槛 ≥ 0.94，问题明细见 rows）
+关键词出处(报告项):   0.436  （逐字出自原文/材料；金标自身 0.36，人审可改词）
+分值偏差 score 和 vs 满分: mean=0.008 max=0.2（只报告）
+脏标答鲁棒性: 1.0  （报告项，precheck 确定性兜底预期 1.0，6 条）
+LLM 调用量: 52
+结果已落盘 → D:\AIWorkspace\OfferLoop\offerloop\eval\results\baseline\decompose_eval_results.json
+
+===== demo (rc=0) =====
+  henan_2024_city_1      应用文    bad       漏点 6 锚定4 示证✓ 
+  henan_2024_city_3      应用文    bad       漏点 8 锚定3 示证✓ 
+  henan_2025_city_2      应用文    bad       漏点10 锚定9 示证✓ 
+  henan_2025_county_2    应用文    bad       漏点11 锚定5 示证✓ 
+  henan_2024_city_1      应用文    half_done 漏点 3 锚定2 示证✓ 
+  henan_2025_city_1      归纳概括   bad       漏点 8 锚定8 示证✓ 
+  henan_2025_county_1    归纳概括   bad       漏点 5 锚定5 示证✓ 
+  henan_2025_county_5    归纳概括   bad       漏点 5 锚定5 示证✓ 
+  jiangsu_2019_b_2       归纳概括   bad       漏点 3 锚定3 示证✓ 
+  henan_2025_city_1      归纳概括   half_done 漏点 3 锚定3 示证✓ 
+  jiangsu_2022_b_3       提出对策   bad       漏点 4 锚定2 示证✓ 
+  jiangsu_2023_b_3       提出对策   bad       漏点 4 锚定4 示证✓ 
+  jiangsu_2023_c_3       提出对策   bad       漏点 5 锚定5 示证✓ 
+  jiangsu_2022_b_3       提出对策   half_done 漏点 2 锚定0 示证✓ 
+  henan_2024_city_2      综合分析   bad       漏点 5 锚定4 示证✓ 
+  henan_2025_city_3      综合分析   bad       漏点 6 锚定2 示证✓ 
+  henan_2025_county_3    综合分析   bad       漏点 6 锚定1 示证✓ 
+  jiangsu_2019_b_1       综合分析   bad       漏点 3 锚定1 示证✓ 
+  henan_2024_city_2      综合分析   half_done 漏点 2 锚定2 示证✓ 
+
+============================================================
+样本数: 19（bad 15 + half_done 4）
+material_anchored（L3 锚定有真出处）:  1.0  （红线 == 1.0，68/68）
+anchored_coverage（漏点锚定覆盖率）:    0.687  （报告项）
+no_full_answer（示范不代写整段）:       1.0  （红线 == 1.0，违规 0 条）
+no_fabrication（示证不臆造）:           1.0  （红线 == 1.0，违规 0 条）
+leading_ok（推 1 个 = score 最大）:      1.0  （报告项）
+hit_snippet_ok（命中点带作答片段）:      1.0  （报告项）
+示证生成: demo 19 / cause 19 / 空 0 / 失败 0
+LLM 调用量: 38
+结果已落盘 → D:\AIWorkspace\OfferLoop\offerloop\eval\results\baseline\demo_eval_results.json

@@ -218,6 +218,7 @@ def decompose_points(
                 keywords=[str(k).strip() for k in (p_data.get("keywords") or []) if str(k).strip()],
                 score=float(p_data.get("score") or 0),
                 point_type=(p_data.get("point_type") or "").strip(),
+                source_snippet=(p_data.get("source_snippet") or "").strip(),
                 created_at=now,
             )
         except (ValidationError, TypeError, ValueError) as e:
