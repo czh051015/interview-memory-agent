@@ -248,7 +248,7 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
-// ── 申论单题上传 + 示证（docs/22 §3.5 / 对话迭代 / 有界追问）──
+// ── 申论单题上传 · 双模式评分（docs/38 §6：gold 带 question_id → 门禁，缺省 → 示证）──
 // 前端无状态：每次调用自带 gold（内联采分点+材料），后端 _resolve 优先用 gold。
 
 // 文字版标准答案 → 采分点（docs/24 §5.1）：纯文字才走此接口（LLM 拆解），
@@ -285,11 +285,12 @@ export function getExplain(
   return post<ExplainResult>("/api/shenlun/practice/explain", { gold, answer, point_id });
 }
 
+// 错题本快照（docs/22 §3.6）：cause_type/cause 回传用户看到的徽章口径句
+// （黄行 = 漏答：原因即 verdict.reason，由前端按 status 映射，无 AI demo 依赖）
 export function addWrongbook(
   gold: InlineGold,
   answer: string,
   point_id: string,
-  demo: string,
   cause_type: string,
   cause: string,
 ): Promise<WrongbookResult> {
@@ -298,7 +299,7 @@ export function addWrongbook(
     answer,
     point_id,
     answer_snippet: "",
-    demo,
+    demo: "",
     cause_type,
     cause,
   });

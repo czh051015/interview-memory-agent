@@ -1,12 +1,15 @@
 "use client";
 
-export type Tab = "dashboard" | "practice" | "archive" | "record";
+// docs/39：申论错题本 = 第 5 页签（排 dashboard/practice/archive/record 之后）；
+// 底部「面试错题本 →」（/dashboard 面经遗留页入口）已删——申论侧错题本不再跨域跳面经页
+export type Tab = "dashboard" | "practice" | "archive" | "record" | "wrongbook";
 
 const TABS: Array<{ key: Tab; label: string; icon: string }> = [
   { key: "dashboard", label: "工作台", icon: "▦" },
   { key: "practice", label: "练习", icon: "✍" },
   { key: "archive", label: "档案", icon: "🗂" },
   { key: "record", label: "录入", icon: "＋" },
+  { key: "wrongbook", label: "错题本", icon: "❌" },
 ];
 
 export default function Sidebar({
@@ -24,8 +27,8 @@ export default function Sidebar({
             申
           </span>
           <div>
-            <h1 className="text-sm font-semibold text-zinc-900 leading-tight">申论陪练</h1>
-            <p className="text-[10px] text-zinc-400">练一道，忘不了的采分点</p>
+            <h1 className="text-sm font-semibold text-zinc-900 leading-tight">PointLoop 逐点 · 申论陪练</h1>
+            <p className="text-[10px] text-zinc-400">逐点对账，练一道忘不了的采分点</p>
           </div>
         </a>
       </div>
@@ -46,12 +49,6 @@ export default function Sidebar({
           </button>
         ))}
       </nav>
-
-      <div className="px-4 py-3 border-t border-zinc-100 text-[11px]">
-        <a href="/dashboard" className="text-zinc-400 hover:text-indigo-600 transition-colors">
-          面试错题本 →
-        </a>
-      </div>
     </aside>
   );
 }

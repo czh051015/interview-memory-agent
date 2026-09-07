@@ -7,6 +7,9 @@ conftest 全局把 embed_zh mock 成 None（降级），本文件测试内再 pa
   V_ABOVE = [0.75, √(1−0.75²)] → cos = 0.75（> 默认 τ=0.71）
   V_BELOW = [0.7, √(1−0.7²)]   → cos = 0.70（< 默认 τ=0.71）
   V_LO = [0.2, √(1−0.04)]      → cos = 0.2
+
+docs/38 后 score_answer 恒走确定性引擎（SCORE_ENGINE 选型已退役，D49）——
+本套件测语义层本身（docs/25 §3，score_answer 保留给旧口径，§10 注意1）。
 """
 import math
 from unittest.mock import patch

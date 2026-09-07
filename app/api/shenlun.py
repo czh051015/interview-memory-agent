@@ -1,35 +1,44 @@
-"""申论工作台 API（docs/22 §3.5）—— 把已存在的申论业务函数封装成无状态 REST 端点。
+"""申论工作台 API（docs/22 §3.5 + docs/38 §6 双模式契约）—— 无状态 REST 端点。
 
-范式（docs/22）：考你 → 帮你（示证）。practice/submit 只做确定性评分（L1）+ 推 1 个
-最该补的漏点；用户点开某漏点才调 practice/guidance 按需生成 L2/L4（旧自动逼问循环已删）。
+范式（docs/22）：考你 → 帮你（示证）。docs/38 起评分 = 双模式，由 trusted 信号路由：
+  · 门禁 gate（trusted：显式声明 question_id 且在库一致，D41）——规则绿/黄 + 灰带
+    LLM 疑似标注（judge_suspect，永不硬判）；响应 = mode + verdicts（§6 PointVerdict）。
+  · 示证 align（内联无 qid）——docs/37 差异配对（align_answer，0 判定 token）。
+  仅 guidance（③改进建议）懒加载 1 次 LLM；wrongbook/explain/reflow 等旧链路保留
+  确定性 score_answer 口径（docs/38 §10 注意1）。
 
 端点：
   POST /api/shenlun/practice/start     → ReAct 推题（decide 推荐优先，规则回退兜底；题库空 404）
   POST /api/shenlun/practice/parse     → 文字版标准答案 → 采分点（docs/24 §4.2，LLM 拆解 + trace）
-  POST /api/shenlun/practice/submit    → 确定性评分（score_answer，L1 命中/漏点 + 材料锚定）+ 推 1 个漏点
-  POST /api/shenlun/practice/guidance  → 按需示证：单漏点 L3（材料锚定，0 token）+ L2(DEMO) + L4(CAUSE)
+  POST /api/shenlun/practice/submit    → 双模式分发：门禁（规则+灰带 LLM）/ 示证（差异配对）
+  POST /api/shenlun/practice/guidance  → 仅门禁：单点③改进建议（gap/how/rewrite，1 次 LLM）
   POST /api/shenlun/practice/complete  → 回流（reflow_answer：answers/weak_points/events + answer_rounds）
   GET  /api/shenlun/remind             → 今日提醒（毕业考候选 ≤2 + 该练 topK ≤3）
   GET  /api/shenlun/weakpoints         → 薄弱点档案全表（state 筛选，档案 tab）
 
-复用（零修改）：src/shenlun/{react.decide, score.score_answer, reflow.{load_question,reflow_answer},
-profile.{read_weak_points,read_all_weak_points,graduation_candidates}} + src.mock.runtime.{guidance,pick_leading_point}。
+复用（零修改）：src/shenlun/{react.decide, reflow.{load_question,reflow_answer},
+profile.{read_weak_points,read_all_weak_points,graduation_candidates}} + src.mock.runtime.{guidance,explain_point}。
 """
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from src import config as _cfg
 from src.cleaner.schema import utcnow
-from src.mock.runtime import PASS_HIT_RATIO, guidance, explain_point, pick_leading_point
+from src.mock.runtime import guidance, explain_point
+from src.shenlun.align import align_answer
+from src.shenlun.judge_llm import judge_suspect
 from src.shenlun.profile import graduation_candidates, read_all_weak_points, read_weak_points
 from src.shenlun.react import decide
+from src.shenlun.question_store import next_user_question_id, save_user_question
 from src.shenlun.reflow import load_question, reflow_answer
-from src.shenlun.score import from_benchmark, score_answer
+from src.shenlun.score import from_benchmark, gate_score, assemble_gate, score_answer
 from src.shenlun.wrongbook import build_wrongbook_item
 from src.cleaner.decompose import decompose_points
 from src.shenlun.score import _anchor_sentences
 from app.utils.decompose_cache import save_trace, load_trace
+import hashlib
 import uuid
 import logging
 import time
@@ -91,37 +100,86 @@ class InlineGold(BaseModel):
     """前端"单题上传"模式内联的采分点 + 材料（docs/22 §3.5 追加：解题库依赖）。
 
     points 直接是结构化采分点（0 token 解析，主路径）；material/question/qtype 随题面。
-    question_id 仍保留（题库"示例题"模式），两者二选一。
+    question_id 新增（docs/38 §6）：声明该题来自题库/benchmark → 门禁；缺省 → 示证。
     """
     points: list[dict] = Field(..., description="采分点列表（{id,point,keywords,score,point_type}）")
     material: str = ""
     question: str = ""
     qtype: str = ""
+    question_id: str = ""  # docs/38 D41：非空 → 校验在库 + points 一致才 trusted，否则 400
 
 
-def _resolve(req) -> tuple[list, str, str, str, str, dict | None]:
-    """从请求解析评分所需上下文：内联 gold 优先，否则按 question_id 读题库。
+def _mode(trusted: bool) -> str:
+    """评分模式路由（docs/38 D40）：SCORE_FORCE（测试/演示锁定）优先，否则 trusted→gate。"""
+    return _cfg.SCORE_FORCE or ("gate" if trusted else "align")
 
-    返回 (points, material, question, qtype, qid, ctx)：
+
+def _points_equal(a: list[dict], b: list[dict]) -> str | None:
+    """全量比对两套采分点 id/point/keywords（docs/38 D41 / §10 注意3）。
+
+    防"声称 henan 题但塞了自造 points 蹭门禁"——trusted 语义的底线。
+    返回 None = 一致；否则返回不一致描述（第一处差异）。
+    """
+    def norm(pts: list[dict]) -> dict:
+        out = {}
+        for p in pts or []:
+            kws = tuple(sorted(str(k) for k in (p.get("keywords") or [])))
+            out[str(p.get("id", ""))] = (str(p.get("point", "")), kws)
+        return out
+
+    na, nb = norm(a), norm(b)
+    if set(na) != set(nb):
+        return f"采分点 id 集不一致（声明 {sorted(na)} vs 库 {sorted(nb)}）"
+    for pid in na:
+        if na[pid] != nb[pid]:
+            return f"采分点 {pid} 与库题不一致（声明 {na[pid][0]!r}/关键词 {list(na[pid][1])} vs 库 {nb[pid][0]!r}/关键词 {list(nb[pid][1])}）"
+    return None
+
+
+def _resolve(req) -> tuple[list, str, str, str, str, dict | None, bool]:
+    """从请求解析评分所需上下文，并判定 trusted（docs/38 D41）。
+
+    返回 (points, material, question, qtype, qid, ctx, trusted)：
+      - trusted=True → 门禁模式：显式声明了 question_id 且校验在库（内容全量比对通过）。
+      - trusted=False → 示证模式（内联无 qid，或纯 question_id 命题路径以外）。
       - ctx：错题本入库用的题目载体；题库模式返回 DB item，内联模式返回合成 dict。
     既无 gold 也无 question_id → 400。
     """
     g = getattr(req, "gold", None)
     if g is not None and g.points:
+        if getattr(g, "question_id", ""):  # D41：声明来自题库 → 必须与库题逐点一致
+            item = load_question(g.question_id)  # 查无此题：用 400（防伪造 qid 蹭门禁），不 404
+            if item is None:
+                raise HTTPException(status_code=400,
+                                    detail=f"声明的题目不存在题库中：{g.question_id}（防伪 qid 校验，D41）")
+            diff = _points_equal(g.points, item["gold"]["reference_points"])
+            if diff:
+                raise HTTPException(status_code=400,
+                                    detail=f"内联采分点与库题不一致，不能按门禁评分：{diff}")
+            points = from_benchmark(g.points)
+            material = g.material or item["task"]["material"]  # 材料缺失时回退库题（锚定可用）
+            question = g.question or item["task"]["question"]
+            qtype = g.qtype or item["meta"]["type"]
+            return points, material, question, qtype, g.question_id, item, True
         points = from_benchmark(g.points)
         material = g.material or ""
         question = g.question or ""
         qtype = g.qtype or ""
-        ctx = {"id": "inline", "task": {"question": question}, "meta": {"type": qtype}}
-        return points, material, question, qtype, "inline", ctx
+        # docs/39 §7.1：单题 ctx.id 带题面稳定 hash —— 此前恒 "inline"，手动录的不同题
+        # 同漏同点会互相覆盖（题面丢失）；hash 后同题同点仍 upsert（保留语义），跨题不再冲突。
+        # ctx 目前只被 wrongbook 落库消费（build_wrongbook_item 拼 sl_{id}_{point_id}），
+        # 变更前已 grep ctx["id"] 无其他消费点。
+        ctx = {"id": f"inline_{hashlib.md5(question.encode('utf-8')).hexdigest()[:8]}",
+               "task": {"question": question}, "meta": {"type": qtype}}
+        return points, material, question, qtype, "inline", ctx, False
     if not getattr(req, "question_id", ""):
         raise HTTPException(status_code=400, detail="需提供 question_id 或 gold")
-    item = _load_or_404(req.question_id)
+    item = _load_or_404(req.question_id)  # 纯 question_id（无 gold）：points 即库题 → 天然 trusted
     points = from_benchmark(item["gold"]["reference_points"])
     material = item["task"]["material"]
     question = item["task"]["question"]
     qtype = item["meta"]["type"]
-    return points, material, question, qtype, req.question_id, item
+    return points, material, question, qtype, req.question_id, item, True
 
 
 # ── 练习会话（无状态）──────────────────────────────────────────────
@@ -151,37 +209,46 @@ class SubmitRequest(BaseModel):
     answer: str = Field(..., min_length=1, description="作答文本")
 
 
+def _verdict_dict(v) -> dict:
+    """PointVerdict → §6 契约 json（mode 每项带；evidence 契约为 string，null 归一空串）。"""
+    return {
+        "point_id": v.point_id,
+        "point_name": v.point_name,
+        "mode": "gate",
+        "status": v.status,                       # hit | miss | suspect
+        "matched_by": v.matched_by,               # kw（规则绿）| llm（灰带放行绿/疑似）
+        "terms": {"matched": list(v.terms.get("matched", [])),
+                  "missing": list(v.terms.get("missing", []))},
+        "evidence": v.evidence or "",             # 作答原句（规则定位）；黄行空（§8.1）
+        "anchor": v.anchor,                       # 「材料第X段：'…'」，hit/miss/suspect 都下发（补老缺口）
+        "official": v.official,                   # source_snippet ?? 材料锚句原文（D46 兜底）
+        "suspect": v.suspect,                     # 仅 status=suspect 非空
+        "reason": v.reason,                       # 为什么标（规则文案或 LLM reason，D47 ①）
+    }
+
+
 @router.post("/shenlun/practice/submit")
 def practice_submit(req: SubmitRequest):
-    """评分（L1）+ 推 1 个最该补的漏点（docs/22 §3.5）。
+    """评分（docs/38 §6 双模式）：门禁（规则 + 灰带 LLM 疑似标注）/ 示证（差异配对）。
 
-    纯确定性，不调 LLM：hit/miss 判定 + 每漏点挂材料原话（material_source，score 锚定）；
-    不再自动逼问（旧 guidance 循环已删）——漏点的 L2/L4 由用户点开
-    POST /shenlun/practice/guidance 按需生成。支持题库(question_id)与单题上传(gold)两种来源。
+    模式由 _resolve 的 trusted 信号路由（SCORE_FORCE 可强制，仅测试/演示，D49）：
+      · gate：对每点规则绿/黄 + 灰带点聚合一次 judge_suspect（§10 注意2），
+        合并成 §6 verdicts（含 anchor 全量下发，补 docs/36 老缺口）；LLM 挂 → 灰带
+        全放行（安全方向），响应仍完整。
+      · align：docs/37 配对形态（align_answer，0 判定 token），无三色/疑似/建议。
     """
-    points, material, question, _, qid, _ = _resolve(req)
-    sr = score_answer(req.answer, points, materials=material, question=question)
-    passed = sr.hit_ratio >= PASS_HIT_RATIO
-    leading = pick_leading_point(sr.miss_points, qid)
+    points, material, question, _, _, _, trusted = _resolve(req)
+    mode = _mode(trusted)
+    if mode == "align":
+        ar = align_answer(req.answer, points, materials=material, question=question)
+        return {"mode": "align", **ar.to_dict()}
+    gray = [v for v in gate_score(req.answer, points, materials=material) if v.status == "gray"]
+    marks, warnings = judge_suspect(gray, req.answer)  # 灰带为空/LLM 不可用 → 不阻塞
+    verdicts = assemble_gate(req.answer, points, materials=material, suspects=marks)
     return {
-        "hit_ratio": round(sr.hit_ratio, 4),
-        "passed": passed,
-        "hits": [
-            {"id": p.id, "point": p.point, "score": p.score,
-             "point_type": p.type, "matched_text": p.matched_text,
-             "matched_by": p.matched_by,          # kw / semantic / llm（docs/25/26，trace 可追踪）
-             "semantic_score": p.semantic_score}  # 语义命中相似度（kw 命中为 None）
-            for p in sr.hit_points
-        ],
-        "misses": [
-            {"id": p.id, "point": p.point, "score": p.score,
-             "point_type": p.type, "material_source": p.material_source}
-            for p in sr.miss_points
-        ],
-        "leading": None if leading is None else {
-            "point_id": leading.id, "point": leading.point, "score": leading.score,
-            "material_source": leading.material_source,
-        },
+        "mode": "gate",
+        "verdicts": [_verdict_dict(v) for v in verdicts],  # 顺序 = 采分点顺序
+        "warnings": warnings,
     }
 
 
@@ -246,23 +313,27 @@ class GuidanceRequest(BaseModel):
 
 @router.post("/shenlun/practice/guidance")
 def get_guidance(req: GuidanceRequest):
-    """按需示证：单漏点 L3（材料锚定，0 token）+ L2(DEMO) + L4(CAUSE)（LLM）。
+    """建议区③改进建议（docs/38 §4.3）：单点懒加载，1 次 LLM，仅门禁模式。
 
-    用户点开某个漏点才调一次；point_id 不在该题采分点集 → 404。
-    LLM 失败不阻断：demo/cause 为空串，L3 材料锚定仍返回。
+    建议区 ①②（为什么标 / 标准答案原文）随评分响应回放（0 token），前端点开某点
+    才调本端点生成 ③ gap/how/rewrite（候选，措辞带"（供参考，以官方答案为准）"）。
+    示证档无判定无建议（docs/38 §7 runtime：示证档 guidance 不路由）→ 400 明确提示。
+    LLM 失败不阻断：gap/how/rewrite 置空仍返回（②已在评分响应里，不重复回放）。
     """
-    points, material, _, _, _, _ = _resolve(req)
-    g = guidance(material, req.answer, points, req.point_id)
+    points, material, question, _, _, _, trusted = _resolve(req)
+    if _mode(trusted) != "gate":
+        raise HTTPException(status_code=400,
+                            detail="示证模式仅标注差异，不生成改进建议——需门禁题（带 question_id）")
+    g = guidance(material, req.answer, points, req.point_id, question=question)
     if g is None:
-        raise HTTPException(status_code=404, detail=f"漏点不存在：{req.point_id}")
+        raise HTTPException(status_code=404, detail=f"采分点不存在：{req.point_id}")
     return {
         "point_id": g.point_id,
         "point": g.point,
-        "material_source": g.material_source,
-        "demo": g.demo,
-        "cause_type": g.cause_type,
-        "cause": g.cause,
-        "fix": g.fix,
+        "official": g.official,
+        "gap": g.gap,
+        "how": g.how,
+        "rewrite": g.rewrite,
     }
 
 
@@ -287,7 +358,7 @@ def add_wrongbook(req: WrongbookRequest):
     环境 chromadb 链路，同 test_shenlun_api 注释）。
     题库模式 ctx=DB item；单题上传模式 ctx=合成 dict（id=inline）。
     """
-    points, material, question, _, _, item = _resolve(req)
+    points, material, question, _, _, item, _ = _resolve(req)
     p = next((x for x in points if x.id == req.point_id), None)
     if p is None:
         raise HTTPException(status_code=404, detail=f"采分点不存在：{req.point_id}")
@@ -322,7 +393,7 @@ def get_explain(req: ExplainRequest):
     用户想"换个说法 / 为什么这样写 / 和邻点啥区别"时的安全回应；point_id 不在集 → 404。
     LLM 失败不阻断：rephrase/why/distinguish 置空，L3 材料锚定仍返回。
     """
-    points, material, _, _, _, _ = _resolve(req)
+    points, material, _, _, _, _, _ = _resolve(req)
     e = explain_point(material, req.answer, points, req.point_id)
     if e is None:
         raise HTTPException(status_code=404, detail=f"漏点不存在：{req.point_id}")
@@ -383,9 +454,10 @@ class RecordRequest(BaseModel):
 def shenlun_record(req: RecordRequest):
     """录入预览：标准答案 → 拆采分点（LLM，温度 0）。
 
-    docs/20 §3 录入 tab 的数据源。demo 版只返回拆解预览不落库——
-    人审闸门（annotate_points）+ user_questions 入库在 CLI 工具
-    scripts/run_decompose_question.py（docs/16 §3.4）。
+    docs/20 §3 录入 tab 的数据源。只拆解不落库——页面在预览上逐点编辑
+    （改分/改词/删点/加点）后点「确认入库」走 POST /shenlun/questions
+    （docs/实施计划 任务一：入库唯一实现 src/shenlun/question_store.py，
+    与 CLI run_decompose_question.py 同源）。
     """
     from src.cleaner.decompose import decompose_points
 
@@ -408,6 +480,72 @@ def shenlun_record(req: RecordRequest):
         ],
         "warnings": r.warnings,
     }
+
+
+class UserQuestionRequest(BaseModel):
+    """用户题入库请求（docs/实施计划 任务一）：页面编辑确认后的最终采分点直接写库。
+
+    question_id 可选注入（CLI/测试用）；缺省自动 user_YYYYMMDD_NN。
+    点「确认入库」= 全部采分点人工通过（等价 CLI annotate_points 全 k）。
+    """
+    question: str = Field(..., min_length=1, description="题干")
+    requirements: str = Field(default="", description="作答要求")
+    material: str = Field(default="", description="给定材料")
+    max_score: int = Field(default=20, description="题目满分（手动校验 ≥1，统一 400）")
+    points: list[dict] = Field(..., description="采分点列表（{id,point,keywords,score,point_type}）")
+    question_id: str = Field(default="", description="入库 id（缺省自动生成）")
+
+
+@router.post("/shenlun/questions")
+def save_user_question_api(req: UserQuestionRequest):
+    """用户题入库（docs/实施计划 任务一）：拆解预览 → 页面编辑 → 确认入库 → 进题库。
+
+    纯写库（0 LLM）。写库唯一实现在 src/shenlun/question_store.py（与 CLI 同源，
+    防两份实现漂移）；doc 结构与 CLI 逐字段一致 → load_question/推题/门禁全链路
+    立即可用（load_question 已覆盖 USER_QUESTIONS_DIR，reflow.py）。
+    """
+    # 手动语义校验（统一 400 便于前端直接展示 detail；pydantic 只挡类型/缺字段）
+    if not req.points:
+        raise HTTPException(status_code=400, detail="采分点不能为空")
+    seen_ids: set[str] = set()
+    normalized = []
+    for i, p in enumerate(req.points, 1):
+        raw_id = str(p.get("id") or "").strip()
+        point = str(p.get("point") or "").strip()
+        kws = [str(k).strip() for k in (p.get("keywords") or []) if str(k).strip()]
+        if not point:
+            raise HTTPException(status_code=400, detail=f"第 {i} 个采分点名称为空")
+        if not kws:
+            raise HTTPException(status_code=400, detail=f"采分点「{point}」未填关键词")
+        try:
+            score = int(p.get("score") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"采分点「{point}」分值不是整数") from None
+        if score < 0:
+            raise HTTPException(status_code=400, detail=f"采分点「{point}」分值不能为负")
+        # id 归一：空/重复 → 补 p{N}（LLM 拆点习惯 p1/p2…，保持同风格）
+        if not raw_id or raw_id in seen_ids:
+            n = 1
+            while f"p{n}" in seen_ids:
+                n += 1
+            raw_id = f"p{n}"
+        seen_ids.add(raw_id)
+        normalized.append({
+            "id": raw_id, "point": point, "keywords": kws, "score": score,
+            "point_type": str(p.get("point_type") or "").strip(),
+        })
+    if req.max_score < 1:
+        raise HTTPException(status_code=400, detail="满分需 ≥ 1")
+    qid = req.question_id.strip() or next_user_question_id()
+    save_user_question(
+        question_id=qid,
+        question=req.question,
+        requirements=req.requirements,
+        material=req.material,
+        max_score=req.max_score,
+        points=normalized,
+    )
+    return {"question_id": qid, "stored": len(normalized)}
 
 
 

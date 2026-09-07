@@ -93,17 +93,21 @@ def _print_l1(sr) -> None:
 
 
 def _print_show(g) -> None:
-    """打印单个漏点的示证（L2+L3+L4）。"""
+    """打印单个采分点的示证（L3 + L4 + L2 分支语境，docs/35 口径）。"""
     print(f"\n🔎 示证 · [{g.point_id}] {g.point}")
-    print(f"   📄 L3 材料原话：{g.material_source or '（未锚到）'}")
-    if g.demo:
-        print(f"   ✍️ L2 示范表述：{g.demo}")
+    if g.material_source:
+        print(f"   📄 材料原话：{g.material_source}")
     else:
-        print("   ✍️ L2 示范表述：（未生成）")
-    if g.cause or g.fix:
-        print(f"   🧠 L4 错因：{g.cause_type} — {g.cause}")
-        if g.fix:
-            print(f"   🛠️ L4 改法：{g.fix}")
+        print("   📄 材料原话：（未锚到，无锚点不硬标——疑似锚已砍，docs/35 D27）")
+    if g.cause:
+        # cause 已是「文本比对：…」（docs/33 §4.1 确定性），不再重复贴 cause_type 标签
+        print(f"   🔬 {g.cause}")
+    if g.fix:
+        print(f"   🛠️ 参考改法（供参考，以官方答案为准）：{g.fix}")
+    if g.demo:
+        print(f"   ✍️ 分支语境示例（供参考，以官方答案为准）：{g.demo}")
+    else:
+        print("   ✍️ 分支语境示例：（未生成）")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -137,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     # 推 1 个最该补 + 示证（docs/22 §4 + Q7b：示证式主动，非逼问）
     leading = pick_leading_point(sr.miss_points, qid)
     print(f"\n🎯 最该补的漏点：[{leading.id}] {leading.point}（{leading.score} 分）")
-    g = guidance(material, args.answer, points, leading.id)
+    g = guidance(material, args.answer, points, leading.id, question=question)
     if g:
         _print_show(g)
 
@@ -163,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  无此漏点：{pid}")
             continue
         if parts[0] == "show":
-            g = guidance(material, args.answer, points, pid)
+            g = guidance(material, args.answer, points, pid, question=question)
             if g:
                 _print_show(g)
                 shown[pid] = {"demo": g.demo, "cause": g.cause, "cause_type": g.cause_type}

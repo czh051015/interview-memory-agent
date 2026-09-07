@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OfferLoop · 面试错题本",
-  description: "记得你的面试错题本 Agent",
+  title: "PointLoop · 申论陪练",
+  description: "记得你漏了哪些采分点的申论陪练 Agent",
 };
 
 export default function RootLayout({

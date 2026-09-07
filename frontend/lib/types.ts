@@ -29,6 +29,13 @@ export interface KnowledgeItem {
   status: ItemStatus;
   history: Array<{ time: string; from: string | null; to: string; reason: string; actor: string }>;
   user_note: string;
+  feedback: string; // 模拟面试反馈（面试域）/ 申论错题条目：【错因】+【示范】拼接（docs/22 §3.6）
+  // ── 申论错题条目扩展字段（docs/22 §3.6：每漏点一条 sl_{question_id}_{point_id}；后端已序列化，非申论条目留空）──
+  question_id: string; // 申论题目 id（如 henan_2025_city_1）
+  point_id: string; // 申论采分点 id（如 c1）
+  material_source: string; // 漏点材料锚定原话（「材料第1段：'…'」）
+  demo_text: string; // 申论示范表述（L2，feedback 已含【示范】摘要，此字段留源）
+  reflow_tier: string; // red/yellow/green（初始 red）；空 = 非申论条目
   mastery_score: number;
   last_reviewed_at: string | null;
   review_count: number;
@@ -159,7 +166,7 @@ export interface DashboardData {
   }>;
 }
 
-// ── 申论工作台（与后端 app/api/shenlun.py + diagnose.py 对齐，docs/20/22）──
+// ── 申论工作台（与后端 app/api/shenlun.py 对齐）docs/38 双模式：门禁 gate / 示证 align ──
 export interface PracticeStart {
   question_id: string;
   question: string;
@@ -178,44 +185,81 @@ export interface InlinePoint {
   keywords: string[];
   score: number;
   point_type: string;
+  source_snippet?: string; // 标准答案原句摘录（文字版自动解析带出，JSON 手填可省略）
 }
 export interface InlineGold {
   points: InlinePoint[];
   material: string;
   question: string;
   qtype: string;
+  question_id?: string; // docs/38 §6：声明来自题库 → 门禁（D41 校验在库 + points 一致才 trusted）；缺省 → 示证
+  answer?: string; // 预置演示作答（「载入示例题」直接可评，构造多状态分布）
 }
 
-export interface PracticeHit {
-  id: string;
-  point: string;
-  score: number;
-  point_type: string;
-  matched_text: string | null; // 命中片段（L1 标红定位）：kw=含词句，semantic=语义相似句，llm=LLM 引用的作答句
-  matched_by?: "kw" | "semantic" | "llm"; // 命中来源（docs/25 语义层 / docs/26 judge 引擎，kw 命中缺省）
-  semantic_score?: number | null; // 语义命中相似度（docs/25，kw 命中为 null）
-}
-export interface PracticeMiss {
-  id: string;
-  point: string;
-  score: number;
-  point_type: string;
-  material_source: string | null; // 材料锚定句（L3 溯源，「材料第X段：'…'」）
-}
-export interface PracticeLeading {
+// ── 门禁响应（docs/38 §6 PointVerdict）：判定三色 + 规则证据全量下发 ──
+export type VerdictStatus = "hit" | "miss" | "suspect";
+export interface PointVerdict {
   point_id: string;
-  point: string;
-  score: number;
-  material_source: string | null;
+  point_name: string;
+  mode: "gate";
+  status: VerdictStatus;
+  matched_by: "kw" | "llm"; // 规则绿 vs LLM 放行绿 / 疑似（透明可查）
+  terms: { matched: string[]; missing: string[] }; // 规则证据，逐字可复核
+  evidence: string; // 作答原句（规则定位）；黄行空串（§8.1）
+  anchor: string | null; // 「材料第X段：'…'」三态都下发（docs/36 老缺口修复）
+  official: string; // source_snippet ?? 材料锚句原文（D46 兜底）
+  suspect: { label: string; reason: string } | null; // 仅 status=suspect 非空
+  reason: string; // 为什么标（规则文案或 LLM reason，D47 ①）
+}
+export interface GateResult {
+  mode: "gate";
+  verdicts: PointVerdict[]; // 顺序 = 采分点顺序
+  warnings: string[]; // 灰带 LLM 不可用等降级说明（不阻断）
 }
 
-export interface PracticeSubmit {
-  hit_ratio: number;
-  passed: boolean;
-  hits: PracticeHit[]; // L1 命中
-  misses: PracticeMiss[]; // L1 漏点（每点挂材料原话）
-  leading: PracticeLeading | null; // 推 1 个最该补的漏点（示证式主动，非逼问）
+// ── 示证响应（docs/37 §6 配对契约）：只摆证据不判好坏 ──
+export interface AlignOfficial {
+  id: string;
+  point: string;
+  keywords: string[];
+  official_sentence: string | null; // source_snippet（拆点/录入链路才有）
+  material_ref: string | null; // 出处附注「材料第X段：'…'」，可空
 }
+export interface AlignChunk {
+  id: number;
+  text: string;
+}
+export interface AlignItem {
+  point_id: string;
+  chunk_id: number;
+  method: "kw" | "semantic";
+  kws_hit?: string[]; // kw 行带（共现词 = 证据）
+  similarity?: number; // semantic 行带
+}
+export interface AlignGap {
+  point_id: string;
+  max_similarity: number | null; // 语义可用才有值（展示数字，非判定）
+}
+export interface AlignOrphan {
+  chunk_id: number;
+  max_similarity: number | null;
+}
+export interface AlignMeta {
+  engine: string;
+  semantic_used: boolean;
+  warnings: string[];
+}
+export interface AlignResult {
+  mode: "align";
+  official_points: AlignOfficial[];
+  answer_chunks: AlignChunk[];
+  alignments: AlignItem[];
+  gaps: AlignGap[];
+  orphans: AlignOrphan[];
+  meta: AlignMeta;
+}
+
+export type PracticeSubmit = GateResult | AlignResult; // 判别联合：先看 mode
 
 // ── 文字版标准答案自动解析（docs/24 §5.1）：后端 decompose_points 产出 ──
 export interface ParsePoint {
@@ -237,15 +281,16 @@ export interface ParseResult {
   trace: ParseTrace; // 默认不下发解析细节；?dev=1 时前端展示
 }
 
-// 按需示证（点开某漏点才返回）：L3 材料锚定 + L2 示范 + L4 错因/改法
+// 建议区③改进建议（docs/38 §4.3）：点开某点懒加载，仅门禁题路由（示证档 400）；
+// gap/how/rewrite 是候选措辞（前端展示带「（供参考，以官方答案为准）」），LLM 失败置空不阻断。
+// ①②（为什么标 / 标准答案原文）随评分响应回放（0 token），本接口只补 ③。
 export interface GuidanceResult {
   point_id: string;
   point: string;
-  material_source: string | null;
-  demo: string; // L2 示范表述
-  cause_type: string; // L4 错因归类：完全没提/写偏/太模糊
-  cause: string; // L4 错因说明
-  fix: string; // L4 具体改法
+  official: string; // 与 verdict.official 同源（② 回放已在评分响应，不回传重复消费）
+  gap: string; // 差距在哪
+  how: string; // 怎么补（结合②官方写法与材料出处）
+  rewrite: string; // 示范句（漏答给全新示范，沾边给改写）
 }
 
 // 按需讲解（点开某漏点的「追问讲解」按钮）：有界、不生成完整答案（no_full_answer）

@@ -1,5 +1,11 @@
 """申论示证评测 —— 示证 eval（docs/22 §6，替代旧 guidance_eval）。
 
+⚠️ docs/38（2026-09-02）已失效，勿运行：评的对象（misses/leading + guidance
+demo/cause 四分支示证）随双模式落地退役——门禁/示证由 docs/38 §8.1 的
+calibrate_sample.py 三路径与 pytest 接管，旧 verdict 套件按 §8.2 声明全部失效待重建。
+（重建方向：judge_suspect 灰色带样本判定合理性抽查。）
+
+历史文档（供对照，勿执行）：
 评的对象：docs/22 新范式后端（score L1 材料锚定 + guidance 单点示证）。
 ⚠️ 旧 guidance_eval.py 测旧 _APPROACH_PROMPT（苏格拉底逼问），其红线（no_position /
 no_overcopy / no_keyword_spoiler / no_spoiler / evidence_spoiler）设计意图是「引导但不
@@ -38,7 +44,7 @@ except (AttributeError, ValueError, OSError):
 sys.path.insert(0, ROOT := os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.shenlun.score import _anchor_sentences, from_benchmark, score_answer
-from src.mock.runtime import guidance, pick_leading_point
+from src.mock.runtime import guidance  # noqa: F401  # 仅演示失效前旧形态（guidance 新签名不兼容旧字段）
 
 # eval 必须无档案可复现：pick_leading_point 会读 reflow.DB_PATH 的 weak_points，
 # 本机开发期留下的练习档案会让红档优先分支介入（推的 1 个 ≠ score 最大），
@@ -281,4 +287,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # docs/38 §8.2：旧 verdict 套件失效待重建（上方 docstring 失效声明）
+    sys.exit("demo_eval 已失效（docs/38 双模式），勿运行；重建方向见文件头注释。")

@@ -10,6 +10,8 @@
     2. annotate_points()：人工审核闸门（k确认/s改分/w改词/d删除/a新增/x跳过）
     3. 全部通过 → 写 data/user_questions/{id}.json（benchmark 格式，meta.authority="user"）
        未全部通过 → 整批保持草稿，不入库
+入库实现唯一在 src/shenlun/question_store.py（docs/实施计划 任务一：录入页与 CLI
+共用，防两份实现漂移）；本脚本只保留 拆解 + 人审闸门 两条 LLM/交互链。
 
 用 Anaconda Python 跑：D:/ProgramData/anaconda3/python.exe scripts/run_decompose_question.py
 """
@@ -17,18 +19,16 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, ".")
 sys.stdout.reconfigure(encoding="utf-8")
 
-from src.config import DATA_DIR
 from src.cleaner.decompose import decompose_points
 from src.cleaner.annotate import annotate_points
-from src.cleaner.schema import utcnow
-from src.shenlun.reflow import load_question, USER_QUESTIONS_DIR
+from src.shenlun.question_store import next_user_question_id, save_user_question
+from src.shenlun.reflow import load_question
 
 
 def _read_text_file(path: str) -> str:
@@ -37,16 +37,6 @@ def _read_text_file(path: str) -> str:
         print(f"找不到文件: {path}")
         sys.exit(1)
     return p.read_text(encoding="utf-8", errors="replace")
-
-
-def _next_question_id() -> str:
-    """自动生成 id：user_YYYYMMDD_NN（NN 按当天已入库数递增）。"""
-    day = utcnow().strftime("%Y%m%d")
-    prefix = f"user_{day}_"
-    n = 1
-    if USER_QUESTIONS_DIR.exists():
-        n = sum(1 for f in USER_QUESTIONS_DIR.glob(f"{prefix}*.json")) + 1
-    return f"{prefix}{n:02d}"
 
 
 def _gather(args) -> dict:
@@ -88,46 +78,8 @@ def _gather(args) -> dict:
         print("标准答案不能为空")
         sys.exit(1)
 
-    ctx["question_id"] = args.id or _next_question_id()
+    ctx["question_id"] = args.id or next_user_question_id()
     return ctx
-
-
-def _save_user_question(ctx: dict, result) -> None:
-    """写 data/user_questions/{id}.json（benchmark 兼容格式，authority=user）。"""
-    USER_QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
-    points = [{
-        "id": p.id,
-        "point": p.point,
-        "keywords": p.keywords,
-        "score": p.score,
-        "approved": p.approved,
-        "source": p.source,
-    } for p in result.reference_points]
-    doc = {
-        "id": ctx["question_id"],
-        "domain": "shenlun",
-        "meta": {
-            "province": "用户上传",
-            "year": "",
-            "paper": "",
-            "type": "用户上传",
-            "authority": "user",
-            "source": "用户上传标准答案，经 LLM 拆解 + 人工审核（decompose_points → annotate_points）",
-        },
-        "task": {
-            "question": ctx["question"],
-            "requirements": ctx["requirements"],
-            "material": ctx["material"],
-            "max_score": ctx["max_score"],
-        },
-        "gold": {
-            "reference_points": points,
-            "scoring_note": "用户上传题：采分点经人工审核（全部确认通过）后入库；source 保留 llm_draft/human_approved 溯源。",
-        },
-    }
-    path = USER_QUESTIONS_DIR / f"{ctx['question_id']}.json"
-    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n✅ 已入库: {path}")
 
 
 def main() -> None:
@@ -157,7 +109,21 @@ def main() -> None:
 
     print("\n=== 步骤3 · 入库 ===")
     if result.all_approved:
-        _save_user_question(ctx, result)
+        path = save_user_question(
+            question_id=ctx["question_id"],
+            question=ctx["question"],
+            requirements=ctx["requirements"],
+            material=ctx["material"],
+            max_score=ctx["max_score"],
+            points=[{
+                "id": p.id,
+                "point": p.point,
+                "keywords": p.keywords,
+                "score": p.score,
+                "point_type": p.point_type,
+            } for p in result.reference_points],
+        )
+        print(f"\n✅ 已入库: {path}")
     else:
         print(f"整批未全部通过（通过 {result.approved_count}/{len(result.reference_points)}），保持草稿不入库。")
         print("可重新运行本脚本，审核确认所有点后再入库；或换更完整的标准答案重拆。")

@@ -9,6 +9,14 @@ docs/22 §3.2 升级：命中/漏点除 id/名称外，每个点携带
 docs/25 升级（语义匹配层）：关键词硬匹配未中的点，进阶段2 语义匹配——
   点 query（名称+关键词）vs 作答分句取 max cosine，≥ τ 判命中（matched_by="semantic"）。
   仍 0 LLM token（本地 dmeta embedding，确定性）；embedding 不可用则自动降级回纯硬匹配。
+
+docs/38（2026-09-02）双模式改造：LLM 判定分发（SCORE_ENGINE=llm）退役（D49）——
+评分路由改为「门禁 gate / 示证 align」双模式（trusted 信号在 app/api/shenlun.py 判定）：
+  · gate_score（本文件）：规则门禁，每点 all/partial/none 三态（D42/D43/D44），0 token；
+    灰带（partial）点由 src/shenlun/judge_llm.judge_suspect 做疑似标注（D45），永不定性硬判。
+  · align 配对器（src/shenlun/align.py）：不可信题只摆差异（docs/37 形态）。
+score_answer / _score_answer_kw **保留不删**（docs/38 §10 注意1）：旧评测对照、reflow、
+explain 等非门禁链路继续用确定性两段式，仅去掉 llm 分发分支。
 """
 
 from __future__ import annotations
@@ -18,7 +26,7 @@ import math
 import re
 from dataclasses import dataclass, field
 
-from src.config import SCORE_EMBED_BACKEND, SCORE_ENGINE, SCORE_SEMANTIC_TAU
+from src.config import SCORE_EMBED_BACKEND, SCORE_SEMANTIC_TAU
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +45,7 @@ class Point:
     semantic_score: float | None = None  # 语义命中相似度（matched_by="semantic" 时有值，trace 用）
     miss_cause: str = ""                 # 漏点原因（judge 引擎诊断用）：没写/写模糊/没结合材料，docs/26
     quality_cause: str | None = None      # 诊断层标注：套话无具体性/答非所问 等，仅对命中点保留，docs/29
+    source_snippet: str = ""              # 拆点时从标准答案一字摘录的原句（范本对照，docs/35 D25）
 
 
 @dataclass
@@ -182,7 +191,8 @@ def _score_answer_kw(answer: str, points: list[Point], materials: str = "",
     for p in points:
         if any(kw in answer for kw in p.keywords):
             hit = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type,
-                        matched_text=_matched_snippet(answer, p.keywords), matched_by="kw")
+                        matched_text=_matched_snippet(answer, p.keywords), matched_by="kw",
+                        source_snippet=p.source_snippet)
             hit.material_source = _find_material_source(p.keywords, materials)
             result.hit_points.append(hit)
         elif use_semantic:
@@ -191,15 +201,18 @@ def _score_answer_kw(answer: str, points: list[Point], materials: str = "",
             if hit_flag:
                 snippet = sent if sent is None or len(sent) <= _MAX_SNIPPET else sent[:_MAX_SNIPPET] + "…"
                 hit = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type,
-                            matched_text=snippet, matched_by="semantic", semantic_score=round(sim, 4))
+                            matched_text=snippet, matched_by="semantic", semantic_score=round(sim, 4),
+                            source_snippet=p.source_snippet)
                 hit.material_source = _find_material_source(p.keywords, materials)
                 result.hit_points.append(hit)
             else:
-                miss = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type)
+                miss = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type,
+                             source_snippet=p.source_snippet)
                 miss.material_source = _find_material_source(p.keywords, materials)
                 result.miss_points.append(miss)
         else:
-            miss = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type)
+            miss = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type,
+                         source_snippet=p.source_snippet)
             miss.material_source = _find_material_source(p.keywords, materials)
             result.miss_points.append(miss)
     return result
@@ -208,17 +221,13 @@ def _score_answer_kw(answer: str, points: list[Point], materials: str = "",
 def score_answer(answer: str, points: list[Point], materials: str = "",
                  question: str = "", use_semantic: bool = True,
                  tau: float | None = None) -> ScoreResult:
-    """评分入口：docs/31 默认切 LLM，失败时安全回退到确定性 kw+语义引擎。
+    """确定性评分（kw 两段式 + 语义层）入口 —— 旧评测对照 / reflow / explain 等非门禁链路用。
 
-    question 为题干（LLM 判"答非所问"用，docs/31 §3.2 显式传入，勿再从 points 取——
-    Point 无 question 字段）。kw 引擎不需要 question，传了也忽略。
+    docs/38 D49：LLM 判定分发已退役（judge_score 改造为 judge_suspect），本函数恒走
+    确定性引擎（不调 LLM、秒级、可复现）。门禁模式请用 gate_score（all/partial/none
+    三态），示证模式用 align.py —— score_answer 保留只为旧口径兼容（§10 注意1）。
+    question 传了也忽略（kw 引擎不需要题干）。
     """
-    if SCORE_ENGINE == "llm":
-        from src.shenlun.judge_llm import judge_score
-
-        result, _ = judge_score(answer, points, materials=materials, question=question)
-        return result
-
     return _score_answer_kw(answer, points, materials=materials, use_semantic=use_semantic, tau=tau)
 
 
@@ -231,6 +240,146 @@ def from_benchmark(reference_points: list[dict]) -> list[Point]:
             keywords=p["keywords"],
             score=int(p.get("score", 1)),
             type=p.get("point_type", ""),
+            source_snippet=p.get("source_snippet", ""),  # 库题 benchmark 无此键 → 空；文字版拆点有
         )
         for p in reference_points
     ]
+
+
+# ── docs/38 门禁模式规则层（D42/D43/D44，0 token）────────────────────────
+# 判定语义：每点 kw 全中出现 → hit（绿·关键词）；全缺 → miss（黄·漏答）；
+# 部分出现 → 灰带，交 judge_suspect 做疑似标注（D44/D45，不进本文件）。
+# 证据全部由规则生成（命中词/缺失词/作答原句/材料锚），LLM 输出面没有证据字段。
+# 本层不复用 _score_answer_kw（any 命中即 hit 的两段式）——全/缺/部分三态是新判据。
+
+_ANCHOR_QUOTE = re.compile(r"材料第\d+段：'([^']*)'")  # _find_material_source 输出里取原句
+
+
+def _anchor_quote(anchor: str | None) -> str:
+    """从锚「材料第X段：'…'」取引号内原句（D46 兜底展示用）；取不到原样返回。"""
+    if not anchor:
+        return ""
+    m = _ANCHOR_QUOTE.search(anchor)
+    return m.group(1) if m else anchor
+
+
+@dataclass
+class GateVerdict:
+    """门禁规则层逐点判定（gate_score 输出；0 token，逐字可复核）。
+
+    status: hit（kw 全中）/ miss（kw 全缺）/ gray（部分命中 → 灰带，待 LLM 疑似标注）。
+    evidence: 作答中含命中词的整句（规则 substring 定位，miss 恒 None）。
+    anchor: 「材料第X段：'…'」（_find_material_source，三种状态下发，D51）。
+    official: 标准答案原文 = source_snippet ?? 材料锚句原文（D46，0 数据工程兜底）。
+    """
+    point_id: str
+    point_name: str
+    score: int
+    point_type: str
+    keywords: list[str]
+    status: str            # hit | miss | gray
+    matched: list[str]     # 命中的 kw（按 keywords 原序）
+    missing: list[str]     # 缺失的 kw
+    evidence: str | None = None
+    anchor: str | None = None
+    official: str = ""
+
+
+def gate_score(answer: str, points: list[Point], materials: str = "") -> list[GateVerdict]:
+    """门禁规则层（docs/38 §4.1）：对每点做 all/partial/none 三态判定，0 token。
+
+    输出顺序 = points 顺序（响应按此序列化，替代旧 point_order）。灰带点由调用方
+    聚合喂 judge_suspect（§10 注意2：一次 LLM 调用，勿逐点调）。
+    """
+    ans = answer or ""
+    out: list[GateVerdict] = []
+    for p in points:
+        matched = [kw for kw in p.keywords if kw in ans]
+        missing = [kw for kw in p.keywords if kw not in ans]
+        status = "hit" if not missing else ("miss" if not matched else "gray")
+        v = GateVerdict(
+            point_id=p.id, point_name=p.point, score=p.score, point_type=p.type,
+            keywords=p.keywords, status=status, matched=matched, missing=missing,
+        )
+        if matched:  # 证据：作答中含命中词的整句（规则定位，截断仅展示）
+            for chunk in _SENT_SPLIT.split(ans):
+                chunk = chunk.strip()
+                if chunk and any(kw in chunk for kw in matched):
+                    v.evidence = chunk if len(chunk) <= _MAX_SNIPPET else chunk[:_MAX_SNIPPET] + "…"
+                    break
+        v.anchor = _find_material_source(p.keywords, materials)
+        v.official = (p.source_snippet or "").strip() or _anchor_quote(v.anchor)
+        out.append(v)
+    return out
+
+
+# ── 响应契约（docs/38 §6）：PointVerdict —— 每条含 reason（为什么标，随评分返回）──
+# reason 文案（规则层固定，测试可钉；蓝行由 LLM reason 透传）：
+REASON_HIT_KW = "该点得分关键词均已出现：{kws}"      # 绿·关键词
+REASON_MISS = "作答中未找到关键词：{kws}"            # 黄·漏答（D43 候选措辞，用户可复核自判）
+REASON_HIT_LLM = "该点关键词部分出现（{kws}），比对官方写法无存疑，放行命中"  # 绿·语义
+
+
+@dataclass
+class PointVerdict:
+    """门禁模式的逐点最终判定（规则 + LLM 灰带标注合并后，docs/38 §6）。"""
+    point_id: str
+    point_name: str
+    status: str                                   # hit | miss | suspect
+    matched_by: str                               # kw（规则绿）| llm（灰带放行绿 / 疑似）
+    terms: dict                                   # {"matched": [...], "missing": [...]}
+    evidence: str | None
+    anchor: str | None
+    official: str
+    suspect: dict | None                          # {"label","reason"}，仅 status=suspect 非空
+    reason: str                                   # 为什么标（规则文案或 LLM reason，D47 ①）
+
+
+def assemble_gate(answer: str, points: list[Point], materials: str = "",
+                  suspects: dict | None = None) -> list[PointVerdict]:
+    """把规则层判定 + 灰带 LLM 标注合并成 docs/38 §6 的 PointVerdict 列表。
+
+    suspects: judge_suspect 的产出 {point_id: None | {"label","reason"}}；点不在表内
+    （LLM 漏标/整体失败）→ 放行绿·语义，不误伤成疑似（D45 安全方向）。
+    本函数不调 LLM（0 token 合并），LLM 标注由调用方先做好再传入。
+    """
+    verdicts: list[PointVerdict] = []
+    for v in gate_score(answer, points, materials=materials):
+        if v.status == "hit":
+            verdicts.append(PointVerdict(
+                point_id=v.point_id, point_name=v.point_name, status="hit", matched_by="kw",
+                terms={"matched": v.matched, "missing": []},
+                evidence=v.evidence, anchor=v.anchor, official=v.official,
+                suspect=None,
+                reason=REASON_HIT_KW.format(kws="、".join(v.matched)) if v.matched
+                       else "该点无得分关键词（按全中出现计）",
+            ))
+        elif v.status == "miss":
+            verdicts.append(PointVerdict(
+                point_id=v.point_id, point_name=v.point_name, status="miss", matched_by="kw",
+                terms={"matched": [], "missing": v.missing},
+                evidence=None, anchor=v.anchor, official=v.official,
+                suspect=None,
+                reason=REASON_MISS.format(kws="、".join(v.missing)) if v.missing
+                       else "该点无得分关键词",
+            ))
+        else:  # gray：LLM 疑似标注（suspects dict 由 judge_suspect 产出）
+            mark = (suspects or {}).get(v.point_id)  # 不在表内 / 显式 null → 都放行
+            if mark is None:
+                verdicts.append(PointVerdict(
+                    point_id=v.point_id, point_name=v.point_name, status="hit", matched_by="llm",
+                    terms={"matched": v.matched, "missing": v.missing},
+                    evidence=v.evidence, anchor=v.anchor, official=v.official,
+                    suspect=None,
+                    reason=REASON_HIT_LLM.format(kws="、".join(v.matched)) if v.matched
+                           else "灰带点无命中关键词（比对官方写法后放行）",
+                ))
+            else:
+                verdicts.append(PointVerdict(
+                    point_id=v.point_id, point_name=v.point_name, status="suspect", matched_by="llm",
+                    terms={"matched": v.matched, "missing": v.missing},
+                    evidence=v.evidence, anchor=v.anchor, official=v.official,
+                    suspect={"label": mark["label"], "reason": mark["reason"]},
+                    reason=mark["reason"],
+                ))
+    return verdicts

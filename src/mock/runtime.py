@@ -1,10 +1,14 @@
-"""申论示证运行态（docs/22 §3.4）：按需示证 guidance(point_id)。
+"""申论门禁运行态（docs/22 §3.4 + 38 §4.3）：按需改进建议 guidance(point_id)。
 
-范式转变（docs/22 §0）：考你（题库出题 + 逼问循环）→ 帮你（上传 + 评分 + 示证）。
-一次评分出 L1（命中/漏点列表，每漏点挂材料原话），默认只推 1 个最该补的漏点 + 示证；
-用户点开某个漏点才调 guidance(point_id) 按需生成 L2(DEMO) + L4(CAUSE)；
-L3（材料原话）由 score 锚定，0 token 不调 LLM。
-旧 practice_one 逼近循环 / 断点续练 / 伪引导确定性过滤已随范式删除（docs/22 §3.4）。
+docs/38 收敛：判因层退役（D47/D49）——「为什么标」由门禁评分响应带回（verdict.reason，
+0 token），建议区只有 ③ 需要懒加载 1 次 LLM；用户点开某采分点才调 guidance(point_id)：
+  · 语境 = 该点的门禁事实（gate_score 单点，0 token）：官方写法 + 命中/缺失关键词 +
+    材料出处 + 作答原文——不判因、不喂材料全文（docs/38 §7 runtime 收敛）
+  · 输出 gap / how / rewrite（候选草稿，前端固定带"（供参考，以官方答案为准）"）
+示证档（align）无判定无建议：guidance 不路由（API 400 明确提示）。
+explain_point（L5 有界讲解）保留：非门禁语境，围绕单点换说法/为什么/辨析。
+旧 docs/35 四分支判因路由 / text_compare_cause / pick_leading_point（推 1 个漏点）
+随 L1 响应形态（misses/leading → verdicts）退役，已在 docs/38 §8.2 失效声明区。
 """
 
 from __future__ import annotations
@@ -12,30 +16,33 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from src.shenlun.score import score_answer
-from .prompts import DEMO_PROMPT, CAUSE_PROMPT, EXPLAIN_PROMPT
+from src.shenlun import score as _sc  # 活引用 gate_score（单点规则判定，0 token）
+from .prompts import EXPLAIN_PROMPT, GATE_IMPROVE_PROMPT
 # 活引用：LLM 调用一律经包取当前属性（测试 patch 的是 src.mock 命名空间：
 # @patch.object(mi, "chat_json")），若缓存为模块全局则 patch 穿透不进来。
 import src.mock as _mi
 
-# 达标阈值：命中率 ≥ 0.8（docs/18 §9，评分语义不变，供调用方判「达标→回流」）
-PASS_HIT_RATIO = 0.8
+# 作答截断（防超长作答爆 token，与 judge_llm 同量级）
+_ANSWER_MAX = 3000
+
+# 门禁单点状态的中文名（guidance 语境行，只陈述命中事实）
+_STATUS_WORD = {"hit": "全部命中", "miss": "全部缺失", "gray": "部分命中"}
 
 
 @dataclass
 class GuidanceResult:
-    """单个漏点的示证产物（L2+L3+L4）。
+    """门禁模式建议区③改进建议（docs/38 §4.3）：单采分点懒加载产物。
 
-    material_source（L3）由 score 锚定，永远有值或 None（不依赖 LLM）；
-    demo/cause（L2/L4）由 LLM 生成，失败或未生成时为空串，调用方按空展示。
+    official（建议区② 同源回放）：source_snippet ?? 材料锚句原文（D46，0 数据工程兜底）；
+    gap/how/rewrite 由 LLM 生成（GATE_IMPROVE_PROMPT，单次调用），失败置空；
+    三者都是候选草稿——展示方固定带"（供参考，以官方答案为准）"。
     """
     point_id: str
     point: str
-    material_source: str | None = None  # L3 材料锚定（「材料第X段：'…'」，0 token）
-    demo: str = ""                      # L2 示范表述
-    cause_type: str = ""                # L4 错因归类：完全没提 / 写偏 / 太模糊
-    cause: str = ""                     # L4 错因说明
-    fix: str = ""                       # L4 具体改法
+    official: str = ""   # ② 标准答案原文（与评分响应同值，③ 语境展示用）
+    gap: str = ""        # 差距在哪（与官方写法的差距，只陈述可验证事实）
+    how: str = ""        # 怎么补（结合官方写法与材料出处）
+    rewrite: str = ""    # 示范句（整点没写到 → 全新示范；已沾边 → 改写示范）
 
 
 @dataclass
@@ -54,40 +61,41 @@ class ExplainResult:
     distinguish: str = ""               # 与相邻点的辨析（无相邻点则空串）
 
 
-def guidance(material: str, answer: str, points, point_id: str) -> GuidanceResult | None:
-    """按需生成单个漏点的示证（docs/22 §3.4）：L3 + L2(DEMO) + L4(CAUSE)。
+def guidance(material: str, answer: str, points, point_id: str,
+             question: str = "") -> GuidanceResult | None:
+    """生成单个采分点的改进建议（docs/38 §4.3 ③，仅门禁模式由 API 调用）。
 
-    只生成用户点开的那个点，不自动循环。point_id 不在 points → None。
-    LLM 失败不阻断：demo/cause 置空，L3 材料锚定仍可展示。
-    调用方（CLI / API）复用同一函数，不另写两套逻辑。
+    语境 = 该点的门禁规则事实（gate_score 单点，0 token）：官方写法（source_snippet ??
+    材料锚句，D46）+ 全部关键词 + 命中/缺失事实 + 材料出处 + 作答原文。
+    不判因（为什么标在评分响应的 verdict.reason，D47 ①）、不喂材料全文——
+    输入面收紧，LLM 只产建议不产证据。point_id 不在 points → None。
+    LLM 失败不阻断：gap/how/rewrite 置空仍返回（② 在评分响应里，不重复回放）。
     """
     p = next((x for x in points if x.id == point_id), None)
     if p is None:
         return None
-    # L3：材料锚定从本次评卷结果取（与展示给用户的 L1 同源，保证一致）
-    sr = score_answer(answer, points, materials=material)
-    sp = next((x for x in sr.hit_points + sr.miss_points if x.id == point_id), None)
-    material_source = sp.material_source if sp else None
-
+    v = _sc.gate_score(answer, [p], materials=material)[0]  # 单点规则判定（0 token）
     base = (
-        f"## 漏点\n{p.point}（{p.score} 分）\n"
-        f"## 材料原话\n{material_source or '（材料中未锚到该点原话）'}\n"
-        f"## 该点关键词\n{'、'.join(p.keywords)}"
+        f"## 采分点\n{p.point}（{p.score} 分）\n"
+        f"## 官方写法\n{v.official or '（未提供官方原句，按采分点名称与关键词判断）'}\n"
+        f"## 该点关键词\n{'、'.join(p.keywords)}\n"
+        f"## 作答中命中/缺失（{_STATUS_WORD.get(v.status, v.status)}）\n"
+        f"命中：{'、'.join(v.matched) or '无'}；缺失：{'、'.join(v.missing) or '无'}\n"
+        f"## 材料出处\n{v.anchor or '（未锚到该点材料原话）'}"
     )
-    out = GuidanceResult(point_id=p.id, point=p.point, material_source=material_source)
+    out = GuidanceResult(point_id=p.id, point=p.point, official=v.official)
     try:
-        demo_data = _mi.chat_json(DEMO_PROMPT, f"{base}\n\n请给出示范表述。", max_tokens=256)
-        out.demo = str(demo_data.get("demo") or "").strip()
+        # ③ 改进建议：单点候选草稿（一次 LLM 调用；失败置空不阻断）
+        data = _mi.chat_json(
+            GATE_IMPROVE_PROMPT,
+            f"{base}\n## 用户作答\n{(answer or '（空答）')[: _ANSWER_MAX]}",
+            max_tokens=512,
+        )
+        out.gap = str(data.get("gap") or "").strip()
+        out.how = str(data.get("how") or "").strip()
+        out.rewrite = str(data.get("rewrite") or "").strip()
     except Exception as e:
-        logging.warning("L2 示范生成失败（point=%s）：%s", p.point, e)
-    try:
-        cause_data = _mi.chat_json(
-            CAUSE_PROMPT, f"{base}\n## 用户作答\n{answer or '（空答）'}", max_tokens=384)
-        out.cause_type = str(cause_data.get("cause_type") or "").strip()
-        out.cause = str(cause_data.get("cause") or "").strip()
-        out.fix = str(cause_data.get("fix") or "").strip()
-    except Exception as e:
-        logging.warning("L4 错因诊断失败（point=%s）：%s", p.point, e)
+        logging.warning("改进建议生成失败（point=%s）：%s", p.point, e)
     return out
 
 
@@ -102,7 +110,7 @@ def explain_point(material: str, answer: str, points, point_id: str) -> ExplainR
     p = next((x for x in points if x.id == point_id), None)
     if p is None:
         return None
-    sr = score_answer(answer, points, materials=material)
+    sr = _sc.score_answer(answer, points, materials=material)
     sp = next((x for x in sr.hit_points + sr.miss_points if x.id == point_id), None)
     material_source = sp.material_source if sp else None
 
@@ -121,21 +129,3 @@ def explain_point(material: str, answer: str, points, point_id: str) -> ExplainR
     except Exception as e:
         logging.warning("L5 讲解生成失败（point=%s）：%s", p.point, e)
     return out
-
-
-def pick_leading_point(miss_points, question_id: str | None = None):
-    """推 1 个最该补的漏点（docs/22 §4，Q7b/Q9a 两条分支保证任何阶段都有解）：
-    1. 有错题本历史：漏点档案里红档（tier=red，反复漏 ≥2 次，profile 按紧急度降序）优先；
-    2. 无历史 / 无红档命中：取 miss_points 中 score 最大者（benchmark 自带 score，天然兜底）。
-    """
-    if not miss_points:
-        return None
-    from src.shenlun.profile import read_weak_points  # 延迟导入：仅此分支才碰档案 DB
-    reds = [wp for wp in read_weak_points(limit=200) if wp.tier == "red"]
-    if reds and question_id:
-        miss_by_key = {f"{question_id}:{m.id}": m for m in miss_points}
-        for wp in reds:  # read_weak_points 已按紧急度降序 → 最该补的红档优先
-            m = miss_by_key.get(wp.point_key)
-            if m is not None:
-                return m
-    return max(miss_points, key=lambda p: p.score)

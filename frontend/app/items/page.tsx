@@ -28,6 +28,13 @@ const STATUS_LABEL: Record<string, string> = {
   unknown: "待标注",
 };
 
+// 申论错题条目 badge（docs/实施计划 任务二）：reflow_tier 非空即申论条目（初始 red，wrongbook.py L53）
+const SL_TIER_CHIP: Record<string, string> = {
+  red: "bg-red-50 text-red-600 border-red-200",
+  yellow: "bg-amber-50 text-amber-600 border-amber-200",
+  green: "bg-emerald-50 text-emerald-600 border-emerald-200",
+};
+
 const MARK_OPTIONS: Array<{ key: "fail" | "partial" | "pass"; label: string }> = [
   { key: "fail", label: "不会" },
   { key: "partial", label: "一半" },
@@ -52,6 +59,10 @@ export default function ItemsPage() {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<KnowledgeItem[] | null>(null);
+  // ── 档案页跳转定位（?item=sl_…）：定位是叠加逻辑，无参数时行为与原来完全一致 ──
+  const [locateId, setLocateId] = useState<string | null>(null); // 待定位条目 id
+  const [locateMiss, setLocateMiss] = useState(false); // 全量拉完仍无 → 顶部提示
+  const [highlightId, setHighlightId] = useState<string | null>(null); // 定位成功 ring 3s
 
   const space = () => localStorage.getItem("offerloop.space") || "default";
 
@@ -85,6 +96,34 @@ export default function ItemsPage() {
   useEffect(() => {
     load(tab);
   }, [tab, load]);
+
+  // 档案页「错题 →」带 ?item=sl_{question_id}_{point_id} 进入：读一次并消费
+  // （useSearchParams 会触发 Next Suspense 要求，此处按 docs 直接读 location.search）。
+  // 定位需全量拉取（条目可能被标过 pass/partial，fail tab 下找不到）→ 切 tab ""。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const item = new URLSearchParams(window.location.search).get("item");
+    if (!item) return;
+    setLocateId(item);
+    setTab("");
+    setLocateMiss(false);
+    window.history.replaceState(null, "", window.location.pathname); // 消费即清，防刷新/返回重复定位
+  }, []);
+
+  // 列表就绪后定位：找到 → scrollIntoView + ring 3s + 展开 answer 折叠区；无 → 提示未入错题本
+  useEffect(() => {
+    if (!locateId || loading || tab !== "") return;
+    const el = document.querySelector(`[data-item-id="${CSS.escape(locateId)}"]`);
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.querySelector("details")?.setAttribute("open", "");
+      setHighlightId(locateId);
+      window.setTimeout(() => setHighlightId((h) => (h === locateId ? null : h)), 3000);
+    } else {
+      setLocateMiss(true); // 全量已拉仍无 → 该弱项尚未入错题本（空态提示）
+    }
+    setLocateId(null); // 只定位一次，后续 items 刷新不再触发
+  }, [locateId, loading, tab, items]);
 
   async function handleMark(it: KnowledgeItem, status: "fail" | "partial" | "pass") {
     if (markingId) return;
@@ -203,6 +242,13 @@ export default function ItemsPage() {
           ))}
         </div>
 
+        {/* 档案跳来但错题本里没有该漏点条目 */}
+        {locateMiss && (
+          <div className="mx-5 mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-700 leading-relaxed">
+            该弱项尚未入错题本（漏答点加入错题本后才会出现）——回「档案」从练习入口再答一次，漏点时会提示加入。
+          </div>
+        )}
+
         {/* List */}
         <div className="px-5 py-4 space-y-2.5">
           {loading ? (
@@ -231,7 +277,12 @@ export default function ItemsPage() {
             (searchResults ?? items).map((it) => (
               <div
                 key={it.id}
-                className="rounded-xl border border-zinc-200 bg-white p-3.5 space-y-2.5 shadow-sm"
+                data-item-id={it.id}
+                className={`rounded-xl border bg-white p-3.5 space-y-2.5 shadow-sm transition-shadow ${
+                  highlightId === it.id
+                    ? "border-indigo-400 ring-2 ring-indigo-300/70"
+                    : "border-zinc-200"
+                }`}
               >
                 <div className="flex items-start gap-2">
                   {editingId === it.id ? (
@@ -254,6 +305,16 @@ export default function ItemsPage() {
                   >
                     {STATUS_LABEL[it.status] ?? it.status}
                   </span>
+                  {it.reflow_tier ? (
+                    <span
+                      className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full border ${
+                        SL_TIER_CHIP[it.reflow_tier] ?? "bg-zinc-100 text-zinc-500 border-zinc-200"
+                      }`}
+                      title="申论漏点条目（错题本红/黄/绿档位，docs/22 §3.6）"
+                    >
+                      申论 · {it.reflow_tier}
+                    </span>
+                  ) : null}
                 </div>
 
                 {editingId === it.id ? (
@@ -269,7 +330,7 @@ export default function ItemsPage() {
                     </label>
                     <label className="block">
                       <span className="text-[10px] text-zinc-400 block mb-0.5">
-                        参考答案 / 面试官反馈（可改）
+                        {it.reflow_tier ? "作答片段（漏答现场原话，可改）" : "参考答案 / 面试官反馈（可改）"}
                       </span>
                       <textarea
                         value={draft.answer}
@@ -346,7 +407,7 @@ export default function ItemsPage() {
                 {it.answer ? (
                   <details className="group rounded-lg border border-indigo-100 bg-indigo-50/40">
                     <summary className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] text-indigo-600 cursor-pointer select-none list-none">
-                      参考答案 / 面试官反馈
+                      {it.reflow_tier ? "你的作答（漏答现场原话）" : "参考答案 / 面试官反馈"}
                       <span className="ml-auto text-[10px] text-zinc-400 group-open:hidden">展开</span>
                       <span className="ml-auto text-[10px] text-zinc-400 hidden group-open:inline">收起</span>
                     </summary>
@@ -354,6 +415,24 @@ export default function ItemsPage() {
                       {it.answer}
                     </div>
                   </details>
+                ) : null}
+
+                {/* 申论漏点条目增强（docs/实施计划 任务二）：漏点出处锚定 + 错因与示范——
+                    否则跳过来的是"看不懂的面试条目"；topic 已自动显示漏点名 */}
+                {it.reflow_tier && (it.material_source || it.feedback) ? (
+                  <div className="space-y-1.5">
+                    {it.material_source ? (
+                      <p className="text-xs text-zinc-500 leading-relaxed bg-zinc-50 rounded-lg px-2.5 py-1.5">
+                        <span className="text-zinc-400 mr-1">📎 漏点出处</span>
+                        {it.material_source}
+                      </p>
+                    ) : null}
+                    {it.feedback ? (
+                      <p className="text-xs text-zinc-600 leading-relaxed bg-amber-50/70 border border-amber-100 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+                        {it.feedback}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 {/* 标注三态 + 编辑/删除 */}

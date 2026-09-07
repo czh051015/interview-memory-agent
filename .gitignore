@@ -52,3 +52,4 @@ data/chroma_fresh/
 data/*.sqlite3
 data/*.db
 test_root.db
+.pytest_tmp/

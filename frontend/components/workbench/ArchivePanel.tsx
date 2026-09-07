@@ -18,7 +18,11 @@ const TIER_BADGE: Record<string, string> = {
   green: "🟢 巩固中",
 };
 
-export default function ArchivePanel() {
+export default function ArchivePanel({
+  onGoWrongbook, // docs/39：档案行「错题 →」→ 父级切错题本 tab + 定位（不再跨页跳 /items）
+}: {
+  onGoWrongbook: (w: WeakPointItem) => void;
+}) {
   const [state, setState] = useState("");
   const [items, setItems] = useState<WeakPointItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +91,8 @@ export default function ArchivePanel() {
                 <th className="px-3 py-2.5 font-medium">漏/练</th>
                 <th className="px-3 py-2.5 font-medium">连中</th>
                 <th className="px-3 py-2.5 font-medium">状态</th>
-                <th className="px-4 py-2.5 font-medium text-right">紧急度</th>
+                <th className="px-3 py-2.5 font-medium text-right">紧急度</th>
+                <th className="px-3 py-2.5 font-medium text-right">错题</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
@@ -108,8 +113,17 @@ export default function ArchivePanel() {
                     {w.consecutive_hits > 0 ? `${w.consecutive_hits} 次` : "—"}
                   </td>
                   <td className="px-3 py-2.5 text-[11px]">{TIER_BADGE[w.tier] || w.tier}</td>
-                  <td className="px-4 py-2.5 text-right text-xs text-zinc-500">
+                  <td className="px-3 py-2.5 text-right text-xs text-zinc-500">
                     {w.urgency > 0 ? `${w.urgency.toFixed(1)}` : "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <button
+                      onClick={() => onGoWrongbook(w)}
+                      title="去错题本定位这道弱项对应的条目"
+                      className="h-7 px-2.5 rounded-lg border border-indigo-200 text-indigo-600 text-[11px] font-medium hover:bg-indigo-50 transition-colors"
+                    >
+                      错题 →
+                    </button>
                   </td>
                 </tr>
               ))}

@@ -51,10 +51,10 @@ SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflo
 SILICONFLOW_EMBED_MODEL = os.getenv("SILICONFLOW_EMBED_MODEL", "BAAI/bge-m3")
 SCORE_EMBED_BACKEND = os.getenv("SCORE_EMBED_BACKEND", "api")  # api | ollama
 
-# ── 评分引擎选型（docs/26 A/B 对比，docs/31 切换默认）──
-# llm = LLM-as-a-Judge（judge_score，单次约 10s，1 次 LLM 调用）
-# kw  = 确定性两阶段（score_answer，0 token 秒级，兜底/离线）
-SCORE_ENGINE = os.getenv("SCORE_ENGINE", "llm")  # llm | kw
+# ── 评分模式（docs/38 D40/D49）：SCORE_ENGINE（llm|kw 选型）退役 ──
+# docs/38 起评分 = 门禁模式（规则绿/黄 + 灰带 LLM 疑似标注）；SCORE_FORCE 只在
+# 测试/演示里强制示证档（align，0 判定 token），正常 "" = 接口按 trusted 自动分发。
+SCORE_FORCE = os.getenv("SCORE_FORCE", "")  # "" | gate | align
 
 # ── 评分语义匹配层（docs/25 §4 + 26 §7）：阶段2 语义命中阈值 τ ──
 # 关键词硬匹配未中的采分点，与作答分句的 max cosine ≥ τ 即判命中（semantic hit）。
