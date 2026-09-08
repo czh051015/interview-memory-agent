@@ -1,22 +1,23 @@
 "use client";
 
-// ── 申论练习 · 单题双模式（docs/38：门禁 gate / 示证 align）──
-// 产品哲学：审过的题（gold.question_id 在库且采分点全量一致，D41）才允许系统"说三道四"
-// —— 门禁三色判定（绿·关键词 / 绿·AI复核 / 黄·漏答 / 蓝·疑似）+ 建议区三块；
-// 没审过的内联题（无 question_id）只做差异配对 —— 示证档 AI 只摆证据不判（docs/37）。
+// ── 申论练习 · 单题（docs/42 单模式化：单引擎 gate 三色判定 + 采分点来源分层）──
+// 产品哲学（docs/42）：判定引擎只有一套——库内题、内联题统一三色判定
+// （绿·关键词 / 绿·AI复核 / 黄·漏答 / 蓝·疑似，灰带 LLM 永不硬判）；
+// 「可信度」不再是路由模式，而是数据属性——采分点来源分层决定展示标记与回流资格：
+//   L1 库题金标（gold.question_id 在库且全量一致）· L2 用户手填（points_source=manual）
+//   · L3 LLM 拆解（points_source=llm_parse，标「参考 · 未复核」）。
+// 内联题（L2/L3，P-A=②）漏点经「确认无误 · 入错题本」进错题本复习，不进 weak_points 提醒池。
 // 布局：整页两栏（≥1280px 分栏，窄屏退化单列）；左栏 = 材料 + 作答；右栏 = 题面配置
 // （评分前）/ 逐点清单 + 建议卡（评分后）。
-// 门禁（docs/38 §4.3 建议区）：① 为什么标（随评分响应，0 token）② 标准答案原文
-// （D46 兜底）③ 改进建议 gap/how/rewrite（点开懒加载 1 次 LLM，措辞候选带"供参考"）。
+// 建议区（docs/42 P-D=①，L1/L2/L3 全放开）：① 为什么标（随评分响应，0 token）
+// ② 标准答案原文（D46 兜底）③ 改进建议 gap/how/rewrite（点开懒加载 1 次 LLM，
+// L3 带「基于未复核采分点」caveat）。
 // 黄行（miss）琥珀应抄句高亮沿用（docs/36 老缺口 anchor 全量下发后同源）。
-// 示证（docs/37 §7 对照视图）：◎ 有对应 / ~ 语义弱对应 / ○ 未见对应（候选），
-// 措辞遵守 docs/37 §2.3 禁止词表（漏答/命中/没写上/建议你补…一律不出现在本档文案）；
-// 无三色、无疑似、无建议生成。题面/作答改动 → 清空轮次（docs/33 D11）。
+// 题面/作答改动 → 清空轮次（docs/33 D11）。
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { addWrongbook, getGuidance, parsePractice, scorePractice } from "@/lib/api";
 import type {
-  AlignResult,
   GateResult,
   GuidanceResult,
   InlineGold,
@@ -26,8 +27,9 @@ import type {
 } from "@/lib/types";
 
 // ── 示例题（河南 2025 市级，benchmark/data/henan_2025_city_1.json）──
-// 点「载入示例题」即填充输入区并可立即评分。question_id 声明该题在题库 → 门禁模式；
-// 演示「示证模式」：改动题干/材料/标准答案任一内容后重新评分（qid 自动清除）即可对比。
+// 点「载入示例题」即填充输入区并可立即评分。question_id 声明该题在题库 → L1 金标分层；
+// 演示「内联题」：改动题干/材料/标准答案任一内容后重新评分（qid 自动清除）——
+// JSON 手填 = L2，文字自动拆解 = L3（参考 · 未复核）。
 // standard_answer_text（docs/实施计划 任务三）：载入后标准答案框显示这份文字版
 // （解决"界面是 JSON"），评分仍走 samplePoints 库题快照捷径（不经文字解析——LLM 拆点
 // 有漂移，拆出的点 ≠ 库题 9 点 → D41 400 → 门禁演示必丢）；用户改动文字/题面才清
@@ -73,12 +75,9 @@ interface PointDetail {
   added?: boolean;
 }
 
-// ── 双模式判别（响应 = mode 判别联合，docs/38 §6 / 37 §6）────────────
+// ── 响应判别（PracticeSubmit 联合里 align 仅 SCORE_FORCE 测试档可达，生产恒 gate）──
 function isGate(s: PracticeSubmit | null): s is GateResult {
   return !!s && s.mode === "gate";
-}
-function isAlign(s: PracticeSubmit | null): s is AlignResult {
-  return !!s && s.mode === "align";
 }
 
 // ── 门禁徽章（docs/38 §5 四态：绿·关键词 / 绿·语义 / 黄·漏答 / 蓝·疑似）──
@@ -174,8 +173,7 @@ export default function PracticePanel() {
   const current = rounds.length ? rounds[rounds.length - 1] : null;
   const currentAnswer = current ? current.answer : answerStr;
   const showResult = rounds.length > 0;
-  const mode = current ? current.submit.mode : null; // gate | align
-  const curSubmit = current?.submit ?? null; // 最新一轮响应（判别联合：先看 mode 再分派）
+  const curSubmit = current?.submit ?? null; // 最新一轮响应（生产恒 gate；align 仅测试档）
   // 开发者开关：?dev=1 或 localStorage shenlun_dev=1 → 标准答案框下展开「解析 trace」
   const dev =
     typeof window !== "undefined" &&
@@ -203,9 +201,9 @@ export default function PracticePanel() {
     return { byPoint, nums };
   }, [gold, curSubmit]);
 
-  // ── 视图分派（identifier 窄化，TS 判别联合）：门禁清单 / 降级横幅 / 示证渲染 ──
+  // ── 视图分派（TS 判别联合窄化）：评分结果视图 / 测试档 align 兜底提示 ──
   const gateView = isGate(curSubmit) ? curSubmit : null;
-  const alignView = isAlign(curSubmit) ? curSubmit : null;
+  const alignView = curSubmit && !isGate(curSubmit) ? curSubmit : null;
   const gateWarnings = gateView ? gateView.warnings : [];
   // ── 门禁逐点清单（verdicts 顺序 = 采分点顺序，docs/38 §6）──────────
   const gateVerdicts = useMemo(() => (isGate(curSubmit) ? curSubmit.verdicts : []), [curSubmit]);
@@ -298,18 +296,19 @@ export default function PracticePanel() {
         points: samplePoints,
       };
     }
-    // JSON（采分点数组）→ 原样用；纯文字 → LLM 自动拆成采分点再评分
+    // JSON（采分点数组）→ 原样用（手填 = L2，docs/42 M2）；纯文字 → LLM 自动拆成采分点再评分（L3）
     try {
       const parsed: unknown = JSON.parse(s);
       if (Array.isArray(parsed)) {
         setTextMode(false);
         setParseTrace(null);
         return {
-          question_id: trustQid || undefined, // 库题声明（无 = 示证）
+          question_id: trustQid || undefined, // 库题声明（有 = L1，校验过才放行）
           qtype: "归纳概括",
           question: questionStr,
           material: materialStr,
           points: parsed as InlineGold["points"],
+          points_source: "manual", // JSON 手填 = 用户即人审（L2）
         };
       }
       // 能解析但不是数组（不会是采分点 JSON）→ 按文字处理
@@ -337,6 +336,7 @@ export default function PracticePanel() {
         point_type: p.point_type,
         source_snippet: p.source_snippet, // 文字模式拆点带官方原句 → 建议卡参考写法
       })),
+      points_source: "llm_parse", // docs/42 M2：LLM 拆解草稿 = L3（参考 · 未复核），后端响应同此标记
     };
   }
 
@@ -375,10 +375,10 @@ export default function PracticePanel() {
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "评分失败";
-      // docs/38 D41：trusted 校验 400（声明与库题不一致/查无）→ 明确提示并清 qid 回示证
+      // docs/42 防伪 400（声明与库题不一致/查无）→ 明确提示并清 qid，回内联分层
       if (trustQid && /不一致|防伪|不存在题库/.test(msg)) {
         setTrustQid("");
-        setError(`${msg} —— 已清除库题声明（改动过的题面只能按示证模式对照，不能按门禁判分）`);
+        setError(`${msg} —— 已清除库题声明（改动过的题面按内联题分层：手填 L2 / 拆解 L3）`);
       } else {
         setError(msg);
       }
@@ -442,7 +442,7 @@ export default function PracticePanel() {
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold text-zinc-900 whitespace-nowrap">申论练习 · 单题</h2>
             {current && (
-              <ModeTag submit={current.submit} no={current.no} />
+              <RoundTag submit={current.submit} no={current.no} />
             )}
           </div>
           <p className="text-[11px] text-zinc-500 truncate max-w-[60vw]">
@@ -484,8 +484,7 @@ export default function PracticePanel() {
         {/* 左栏：材料 + 作答 */}
         <div className="flex flex-col gap-3 min-w-0 xl:flex-1 xl:min-h-0">
           {showResult && !editOpen && gold ? (
-            <MaterialView material={gold.material} anchors={anchors} onPick={pickPoint}
-              caption={mode === "align" ? "材料原文（右栏对照的出处附注源）" : undefined} />
+            <MaterialView material={gold.material} anchors={anchors} onPick={pickPoint} />
           ) : (
             <div className="rounded-xl border border-zinc-200 bg-white shadow-sm flex flex-col xl:flex-1 xl:min-h-0">
               <Field label={`给定材料${editOpen ? "（编辑中，改后重新评分将清空旧轮次）" : ""}`}>
@@ -495,9 +494,6 @@ export default function PracticePanel() {
               </Field>
             </div>
           )}
-
-          {/* 示证档：作答切句对照（只摆配对事实，docs/37 §7.1）*/}
-          {alignView && <ChunkStrip r={alignView} />}
 
           {/* 你的作答：常驻左栏（材料下方，评分后保留可改 → 重评出新 delta 轮）*/}
           <div className="rounded-xl border border-zinc-200 bg-white shadow-sm shrink-0">
@@ -527,14 +523,15 @@ export default function PracticePanel() {
                   <span className="text-[11px] text-amber-600">改动题干/材料/标准答案 → 重新评分将清空旧轮次（docs/33 D11）</span>
                 )}
               </div>
-              {/* 模式声明（docs/38 §6）：库题声明 → 门禁；缺省 → 示证 */}
+              {/* ── 来源分层说明（docs/42 §4.0）：判定统一三色，分层决定标记与回流资格 ── */}
               <div className={`rounded-lg px-3 py-2 text-[11px] leading-relaxed ${trustQid ? "bg-indigo-50 text-indigo-700 border border-indigo-100" : "bg-zinc-50 text-zinc-500 border border-zinc-100"}`}>
                 {trustQid ? (
-                  <>门禁模式：库题 <b>{trustQid}</b>（载入示例题自带声明，采分点须与库题全量一致才放行）。
-                    改动题干/材料/标准答案任一内容会清除声明 → 回到示证模式。</>
+                  <>库题金标（L1）：<b>{trustQid}</b> 采分点须与题库全量一致才放行（防伪校验）。
+                    改动题干/材料/标准答案任一内容会清除声明 → 按内联题分层。</>
                 ) : (
-                  <>示证模式（未声明库题）：只标注作答与采分点的文本差异，不判好坏、不给建议。
-                    想体验门禁三色 → 点「载入示例题」。</>
+                  <>内联题（docs/42 单模式判定）：JSON 手填采分点 = <b>L2 · 手工背书</b>；
+                    贴文字答案自动拆解 = <b>L3 · 参考（未人工复核）</b>。三色判定照给，
+                    漏点经「确认无误 · 入错题本」复习；想体验库题金标 → 点「载入示例题」。</>
                 )}
               </div>
               <Field label="题干">
@@ -549,7 +546,7 @@ export default function PracticePanel() {
                 {textMode ? (
                   <p className="text-[10px] text-indigo-500 mt-1">已识别为文字模式：点「评分」时自动解析为采分点（JSON 粘贴则原样使用）</p>
                 ) : trustQid && samplePoints ? (
-                  <p className="text-[10px] text-indigo-500 mt-1">库题文字版：评分直接用题库采分点走门禁（不经解析）；改动文字后会自动转为解析 · 示证对照</p>
+                  <p className="text-[10px] text-indigo-500 mt-1">库题文字版：评分直接用题库采分点走 L1 金标判定（不经解析）；改动文字后会自动转为解析 · 按内联题分层</p>
                 ) : null}
               </Field>
 
@@ -617,8 +614,8 @@ export default function PracticePanel() {
             </div>
           ) : gateView ? (
             <>
-              {/* ── 门禁：逐点清单 + 建议卡（docs/38 §4.3）── */}
-                <VerdictList verdicts={gateVerdicts} detail={detail} anchors={anchors}
+              {/* ── 单模式：逐点清单 + 建议卡（docs/38 §4.3 三块 + docs/42 分层标记）── */}
+                <VerdictList verdicts={gateVerdicts} tier={gateView.tier} detail={detail} anchors={anchors}
                   selectedId={selectedId} onPick={pickPoint} />
                 {allHit ? (
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-700">
@@ -628,7 +625,7 @@ export default function PracticePanel() {
                 ) : (
                   selVerdict &&
                   selBadge && (
-                    <VerdictCard v={selVerdict} badge={selBadge}
+                    <VerdictCard v={selVerdict} badge={selBadge} tier={gateView.tier}
                       hasSnippet={!!(gold && gold.points.find((p) => p.id === selVerdict.point_id)?.source_snippet)}
                       d={selectedId ? detail[selectedId] : undefined}
                       onAddWrongbook={addToWrongbook} />
@@ -638,8 +635,11 @@ export default function PracticePanel() {
               </>
           ) : alignView ? (
             <>
-              {/* ── 示证：逐点对照（docs/37 §7，只摆证据不判好坏）── */}
-              <AlignRight r={alignView} />
+              {/* ── 兜底：align 响应仅 SCORE_FORCE=align（测试/回归锁定）可达，生产已退役 ── */}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
+                当前为示证对照档（SCORE_FORCE=align，仅测试/回归用）：只摆差异不判定。
+                生产评分恒为三色判定（docs/42 单模式化）。
+              </div>
               <RoundTrace rounds={rounds} />
             </>
           ) : null}
@@ -649,43 +649,31 @@ export default function PracticePanel() {
   );
 }
 
-// ── header 模式角标（docs/38 §5：门禁模式 / 示证模式）+ 轮次计数 ──
-function ModeTag({ submit, no }: { submit: PracticeSubmit; no: number }) {
+// ── header 轮次徽标（docs/42 单模式：模式角标已删，只留轮次 + 三色计数）──
+function RoundTag({ submit, no }: { submit: PracticeSubmit; no: number }) {
   if (submit.mode === "gate") {
     const hit = submit.verdicts.filter((v) => v.status === "hit").length;
     const miss = submit.verdicts.filter((v) => v.status === "miss").length;
     const sus = submit.verdicts.filter((v) => v.status === "suspect").length;
     return (
-      <span className="inline-flex items-center gap-1.5 shrink-0">
-        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-          门禁模式 · 审过题
-        </span>
-        <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
-          第 {no + 1} 轮 · 绿 {hit} · 黄 {miss} · 蓝 {sus}
-        </span>
+      <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-600 shrink-0">
+        第 {no + 1} 轮 · 绿 {hit} · 黄 {miss} · 蓝 {sus}
       </span>
     );
   }
-  const pairs = submit.alignments.length;
   return (
-    <span className="inline-flex items-center gap-1.5 shrink-0">
-      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200">
-        示证模式 · 仅标注差异
-      </span>
-      <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-500">
-        第 {no + 1} 轮 · 有对应 {pairs} 组 · 未见对应 {submit.gaps.length} 点
-      </span>
+    <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-500 shrink-0">
+      第 {no + 1} 轮
     </span>
   );
 }
 
 // ── 左栏材料：段落只读渲染 + 黄行应抄句琥珀高亮（docs/33 §3.2 机制沿用）──
-// 只服务门禁黄行（status=miss 且有锚）；示证档无高亮（材料只作对照参考）。
-function MaterialView({ material, anchors, onPick, caption }: {
+// 只服务黄行（status=miss 且有锚）；漏答点才暗示"该句可抄"（docs/35 D27 精神沿用）。
+function MaterialView({ material, anchors, onPick }: {
   material: string;
   anchors: AnchorTable;
   onPick: (id: string) => void;
-  caption?: string;
 }) {
   const paras = useMemo(() => {
     const out: { text: string; start: number }[] = [];
@@ -739,7 +727,7 @@ function MaterialView({ material, anchors, onPick, caption }: {
     <div className="rounded-xl border border-zinc-200 bg-white shadow-sm flex flex-col min-h-0 xl:flex-1 xl:min-h-0">
       <div className="px-4 py-2.5 flex items-center justify-between border-b border-zinc-100 shrink-0">
         <p className="text-sm font-semibold text-zinc-900">给定材料</p>
-        <p className="text-[10px] text-zinc-400">{caption ?? "琥珀 = 漏答点的应抄原句（编号对应右栏行，点击看建议）"}</p>
+        <p className="text-[10px] text-zinc-400">琥珀 = 漏答点的应抄原句（编号对应右栏行，点击看建议）</p>
       </div>
       <div className="px-4 py-3 text-sm leading-7 text-zinc-700 xl:overflow-y-auto xl:flex-1 xl:min-h-0">
         {paras.map((p, i) => (
@@ -770,70 +758,12 @@ function MaterialView({ material, anchors, onPick, caption }: {
   );
 }
 
-// ── 左栏作答 · 示证切句展示（docs/37 §7.1）：句末标记 ◎/○/~（中性色，不判好坏）──
-// 措辞遵守 docs/37 §2.3 禁止词表——本组件不出现 漏答/命中/没写上 等判定词。
-function ChunkStrip({ r }: { r: AlignResult }) {
-  const orphans = useMemo(() => new Set(r.orphans.map((o) => o.chunk_id)), [r]);
-  // chunk → 配对点（kw 行记共现词，semantic 行记相似度）
-  const marks = useMemo(() => {
-    const m = new Map<number, Array<{ pointId: string; kw?: string[]; sim?: number }>>();
-    for (const a of r.alignments) {
-      const list = m.get(a.chunk_id) ?? [];
-      if (a.method === "kw") list.push({ pointId: a.point_id, kw: a.kws_hit });
-      else list.push({ pointId: a.point_id, sim: a.similarity });
-      m.set(a.chunk_id, list);
-    }
-    return m;
-  }, [r]);
-
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white shadow-sm shrink-0">
-      <div className="px-4 py-2.5 border-b border-zinc-100 flex items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold text-zinc-900">你的作答 · 切句对照</p>
-        <p className="text-[10px] text-zinc-400">◎ 有对应 · ~ 语义弱对应 · ○ 无对应候选（点句跳右栏对应点）</p>
-      </div>
-      <div className="px-4 py-2 max-h-56 xl:max-h-64 overflow-y-auto space-y-1.5">
-        {r.answer_chunks.length === 0 && <p className="text-xs text-zinc-400 py-1">（作答过短或为空，无切句）</p>}
-        {r.answer_chunks.map((c) => {
-          const pts = marks.get(c.id) ?? [];
-          const isOrphan = orphans.has(c.id);
-          return (
-            <div key={c.id} id={`pAns-${c.id}`}
-              className="text-xs leading-6 text-zinc-700 border-l-2 border-zinc-100 pl-2.5">
-              <span className="text-[10px] text-zinc-400 mr-1.5 select-none">句{c.id}</span>
-              <span className="whitespace-pre-wrap">{c.text}</span>
-              <span className="block text-[10px] mt-0.5">
-                {pts.length === 0 && isOrphan ? (
-                  <span className="text-zinc-400">○ 该句与所有要点均无明显对应（候选：是否重要、要不要补由你判断）</span>
-                ) : (
-                  pts.map((p, i) => (
-                    <button key={i} type="button" onClick={() => scrollTo(`pRow-${p.pointId}`)}
-                      className="mr-2 text-zinc-500 hover:text-indigo-600 hover:bg-indigo-50 rounded px-1 py-px transition-colors"
-                      title="跳右栏对应点">
-                      {p.kw
-                        ? <>◎ 对应点 {p.pointId} · 共现词：{p.kw.join("、")}</>
-                        : <>~ 语义弱对应 · 点 {p.pointId}（相似度 {p.sim !== undefined ? p.sim.toFixed(2) : ""}）</>}
-                    </button>
-                  ))
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function scrollTo(id: string) {
-  const el = document.getElementById(id);
-  el?.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-// ── 右栏 · 门禁逐点清单（docs/38 §4.3 / §5 四态徽章）──────────────
+// ── 右栏 · 逐点清单（docs/38 §5 四态徽章 + docs/42 分层标记）──────────────
 // 顺序 = verdicts 顺序（采分点顺序）；绿行不可点（含 AI 复核放行绿）；黄/蓝行点击展开建议卡。
-function VerdictList({ verdicts, detail, anchors, selectedId, onPick }: {
+// L3（LLM 拆解采分点）行带「参考 · 未复核」标记（判定照给，可信度提示，docs/42 §4.0）。
+function VerdictList({ verdicts, tier, detail, anchors, selectedId, onPick }: {
   verdicts: PointVerdict[];
+  tier: GateResult["tier"];
   detail: Record<string, PointDetail>;
   anchors: AnchorTable;
   selectedId: string | null;
@@ -875,6 +805,12 @@ function VerdictList({ verdicts, detail, anchors, selectedId, onPick }: {
               <span className={`min-w-0 flex-1 truncate text-[13px] ${sel ? "font-medium text-indigo-700" : clickable ? "font-medium text-zinc-800" : "text-zinc-500"}`}>
                 {v.point_name}
               </span>
+              {tier === "L3" && (
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border border-zinc-200 bg-zinc-100 text-zinc-500"
+                  title="采分点由 LLM 从标准答案拆解，未经人工复核（docs/42 L3）">
+                  参考 · 未复核
+                </span>
+              )}
               {detail[v.point_id]?.added && <span className="shrink-0 text-[10px] text-emerald-600">✓ 已入错题本</span>}
               <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badge.cls}`}>
                 {badge.label}
@@ -887,12 +823,14 @@ function VerdictList({ verdicts, detail, anchors, selectedId, onPick }: {
   );
 }
 
-// ── 右栏 · 门禁建议卡（docs/38 §4.3 三块：① 为什么标 / ② 原文 / ③ 改进建议）──
-// ①② 纯数据回放（评分响应已含，0 token）；③ 点开懒加载 1 次 LLM（候选措辞）。
-// 黄行（miss）有错题本按钮（cause = 规则 reason，不拉 LLM demo）；蓝行不给。
-function VerdictCard({ v, badge, hasSnippet, d, onAddWrongbook }: {
+// ── 右栏 · 建议卡（docs/38 §4.3 三块：① 为什么标 / ② 原文 / ③ 改进建议 + docs/42 分层）──
+// ①② 纯数据回放（评分响应已含，0 token）；③ 点开懒加载 1 次 LLM（候选措辞，L3 带 caveat）。
+// 黄行（miss）有错题本按钮（cause = 规则 reason，不拉 LLM demo）；内联题（L2/L3）措辞
+// =「确认无误 · 入错题本」（P-A=②：内联漏点只进错题本；蓝行 AI 判断不硬收）。
+function VerdictCard({ v, badge, tier, hasSnippet, d, onAddWrongbook }: {
   v: PointVerdict;
   badge: VerdictBadge;
+  tier: GateResult["tier"];
   hasSnippet: boolean;
   d?: PointDetail;
   onAddWrongbook: (id: string) => void;
@@ -908,6 +846,11 @@ function VerdictCard({ v, badge, hasSnippet, d, onAddWrongbook }: {
           {badge.label}
         </span>
         <p className="text-sm font-semibold text-zinc-900 min-w-0 truncate">{v.point_name}</p>
+        {tier === "L3" && (
+          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border border-zinc-200 bg-zinc-100 text-zinc-500">
+            参考 · 未复核
+          </span>
+        )}
         {d?.added && <span className="shrink-0 text-[10px] text-emerald-600">✓ 已入错题本</span>}
       </div>
       <div className="px-4 py-3 space-y-2 text-xs text-zinc-700">
@@ -947,7 +890,8 @@ function VerdictCard({ v, badge, hasSnippet, d, onAddWrongbook }: {
                 {g.gap && <p><span className="text-zinc-400">差距：</span>{g.gap}</p>}
                 {g.how && <p><span className="text-zinc-400">怎么补：</span>{g.how}</p>}
                 {g.rewrite && <p><span className="text-zinc-400">示范改写：</span>{g.rewrite}</p>}
-                <p className="text-[10px] text-zinc-300">（供参考，以官方答案为准）</p>
+                {/* docs/42 P-D=①：L3 建议 caveat 带「基于未复核采分点」措辞；L1/L2 走默认候选声明 */}
+                <p className="text-[10px] text-zinc-300">{g.caveat || "（供参考，以官方答案为准）"}</p>
               </div>
             ) : (
               <p className="text-xs text-zinc-300 mt-0.5">（未生成，请对照②官方写法自行组织）</p>
@@ -956,94 +900,18 @@ function VerdictCard({ v, badge, hasSnippet, d, onAddWrongbook }: {
             <p className="text-xs text-zinc-300 mt-0.5">点开时生成…</p>
           )}
         </div>
-        {/* 错题本（黄行规则可证才收；蓝行 AI 判断不硬收）*/}
+        {/* 错题本（黄行规则可证才收；内联题措辞 = 确认无误 · 入错题本，docs/42 P-C=①）*/}
         {miss && (
           <div className="pt-2 border-t border-zinc-100 flex items-center gap-2">
             <button onClick={() => onAddWrongbook(v.point_id)} disabled={d?.added}
               className="text-[11px] px-2 py-1 rounded-md bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50">
-              {d?.added ? "✓ 已入错题本" : "＋ 错题本"}
+              {d?.added ? "✓ 已入错题本" : tier === "L1" ? "＋ 错题本" : "确认无误 · 入错题本"}
             </button>
+            {tier !== "L1" && !d?.added && (
+              <span className="text-[10px] text-zinc-400">确认判定无误后进错题本复习（内联漏点不进提醒池）</span>
+            )}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ── 右栏 · 示证逐点对照（docs/37 §7.3 文案照抄：只陈述可复核的配对事实）──
-// 禁止词（37 §2.3）约束：本组件文案不出现 漏答/命中/没写上/答非所问/偏离/套话/宽泛/
-// 表述不清/建议你补/你应该写——一律「未见对应句（候选）」+ 共现词 / 相似度数字。
-function AlignRight({ r }: { r: AlignResult }) {
-  const byPoint = useMemo(() => {
-    const m = new Map<string, typeof r.alignments>();
-    for (const a of r.alignments) {
-      const list = m.get(a.point_id) ?? [];
-      list.push(a);
-      m.set(a.point_id, list);
-    }
-    return m;
-  }, [r]);
-  const gapSim = useMemo(() => new Map(r.gaps.map((g) => [g.point_id, g.max_similarity])), [r]);
-  const officialById = useMemo(() => new Map(r.official_points.map((p) => [p.id, p])), [r]);
-
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white shadow-sm shrink-0">
-      <div className="px-4 py-2.5 border-b border-zinc-100 flex items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold text-zinc-900">采分点对照（{r.official_points.length} 个）</p>
-        <p className="text-[10px] text-zinc-400 text-right">只摆证据不判好坏 · 点行跳左栏作答句</p>
-      </div>
-      <div className="px-4 pt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-400">
-        <span>◎ 有对应（共现词）</span>
-        <span>~ 语义弱对应（相似度数字）</span>
-        <span>○ 未见对应句（候选）</span>
-      </div>
-      <div className="px-3 py-2 space-y-1.5">
-        {r.official_points.map((p) => {
-          const items = byPoint.get(p.id) ?? [];
-          const sim = gapSim.get(p.id) ?? null;
-          const isGap = items.length === 0;
-          return (
-            <div key={p.id} id={`pRow-${p.id}`}
-              className="rounded-lg px-3 py-2 border border-zinc-100 bg-zinc-50/50">
-              <p className="text-[13px] font-medium text-zinc-800">
-                {p.id} · {p.point}
-                <span className="ml-1.5 text-[10px] text-zinc-400 font-normal">{p.keywords.join("、")}</span>
-              </p>
-              {/* 官方原句 + 材料出处（§5.4：展示锚，不进配对主链）*/}
-              <p className="text-[11px] text-zinc-600 mt-0.5">
-                <span className="text-zinc-400">官方原句：</span>
-                {p.official_sentence ?? "（未提供官方原句）"}
-              </p>
-              <p className="text-[11px] text-zinc-600">
-                <span className="text-zinc-400">材料出处：</span>
-                {p.material_ref ?? "该点无直接材料出处（需自行概括）"}
-              </p>
-              {/* 配对状态（§7.3 文案照抄）*/}
-              <div className="mt-1 space-y-0.5 text-[11px] text-zinc-600">
-                {isGap ? (
-                  <p>○ 作答中未见包含该点关键词的句子
-                    <span className="text-zinc-400">（候选：请自行判断是否重要、要不要补）</span>
-                    {sim !== null && sim !== undefined && (
-                      <span className="text-zinc-400"> · 语义最近句相似度 {sim.toFixed(2)}</span>
-                    )}
-                  </p>
-                ) : (
-                  items.map((a, i) => (
-                    <button key={i} type="button" onClick={() => scrollTo(`pAns-${a.chunk_id}`)}
-                      className="block text-left hover:text-indigo-600 hover:bg-indigo-50 rounded px-1 py-px transition-colors"
-                      title="跳左栏对应作答句">
-                      {a.method === "kw" ? (
-                        <>◎ 有对应：作答句 {a.chunk_id} 含关键词 {a.kws_hit?.join("、")}</>
-                      ) : (
-                        <>~ 语义弱对应：作答句 {a.chunk_id} 语义相近（相似度 {a.similarity !== undefined ? a.similarity.toFixed(2) : ""}），无关键词重叠</>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

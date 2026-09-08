@@ -166,7 +166,7 @@ export interface DashboardData {
   }>;
 }
 
-// ── 申论工作台（与后端 app/api/shenlun.py 对齐）docs/38 双模式：门禁 gate / 示证 align ──
+// ── 申论工作台（与后端 app/api/shenlun.py 对齐）docs/42 单模式：恒 gate 三色判定 + 采分点来源分层 ──
 export interface PracticeStart {
   question_id: string;
   question: string;
@@ -192,11 +192,12 @@ export interface InlineGold {
   material: string;
   question: string;
   qtype: string;
-  question_id?: string; // docs/38 §6：声明来自题库 → 门禁（D41 校验在库 + points 一致才 trusted）；缺省 → 示证
+  question_id?: string; // docs/42 L1：声明来自题库 → 校验在库 + points 全量一致即金标
+  points_source?: "manual" | "llm_parse"; // docs/42 M2 分层信号：manual=手填(L2，缺省) / llm_parse=LLM 拆解(L3)
   answer?: string; // 预置演示作答（「载入示例题」直接可评，构造多状态分布）
 }
 
-// ── 门禁响应（docs/38 §6 PointVerdict）：判定三色 + 规则证据全量下发 ──
+// ── 评分响应（docs/38 §6 PointVerdict + docs/42 tier）：判定三色 + 规则证据全量下发 ──
 export type VerdictStatus = "hit" | "miss" | "suspect";
 export interface PointVerdict {
   point_id: string;
@@ -206,18 +207,22 @@ export interface PointVerdict {
   matched_by: "kw" | "llm"; // 规则绿 vs LLM 放行绿 / 疑似（透明可查）
   terms: { matched: string[]; missing: string[] }; // 规则证据，逐字可复核
   evidence: string; // 作答原句（规则定位）；黄行空串（§8.1）
-  anchor: string | null; // 「材料第X段：'…'」三态都下发（docs/36 老缺口修复）
+  anchor: string | null; // 「材料第X段：'…'」三色都下发（docs/36 老缺口修复）
   official: string; // source_snippet ?? 材料锚句原文（D46 兜底）
   suspect: { label: string; reason: string } | null; // 仅 status=suspect 非空
   reason: string; // 为什么标（规则文案或 LLM reason，D47 ①）
 }
+// 采分点来源分层（docs/42 §4.0）：判定三色对 L1/L2/L3 同权，分层只决定展示标记与回流资格
+// （L1 库题金标 / L2 用户手填 / L3 LLM 拆解「参考 · 未复核」，漏点均走错题本，P-A=②）
+export type PointsTier = "L1" | "L2" | "L3";
 export interface GateResult {
   mode: "gate";
+  tier: PointsTier; // docs/42：来源分层（submit 响应新增）
   verdicts: PointVerdict[]; // 顺序 = 采分点顺序
   warnings: string[]; // 灰带 LLM 不可用等降级说明（不阻断）
 }
 
-// ── 示证响应（docs/37 §6 配对契约）：只摆证据不判好坏 ──
+// ── 示证响应（docs/37 §6 配对契约，SCORE_FORCE=align 测试/回归锁定才返回，生产退役）──
 export interface AlignOfficial {
   id: string;
   point: string;
@@ -277,11 +282,12 @@ export interface ParseTrace {
 }
 export interface ParseResult {
   points: ParsePoint[];
+  points_source?: "llm_parse"; // docs/42 M2：LLM 拆解产物 → 拼 InlineGold 时原样回传
   warnings: string[];
   trace: ParseTrace; // 默认不下发解析细节；?dev=1 时前端展示
 }
 
-// 建议区③改进建议（docs/38 §4.3）：点开某点懒加载，仅门禁题路由（示证档 400）；
+// 建议区③改进建议（docs/42 P-D=①）：点开某点懒加载，L1/L2/L3 全放开；
 // gap/how/rewrite 是候选措辞（前端展示带「（供参考，以官方答案为准）」），LLM 失败置空不阻断。
 // ①②（为什么标 / 标准答案原文）随评分响应回放（0 token），本接口只补 ③。
 export interface GuidanceResult {
@@ -291,6 +297,7 @@ export interface GuidanceResult {
   gap: string; // 差距在哪
   how: string; // 怎么补（结合②官方写法与材料出处）
   rewrite: string; // 示范句（漏答给全新示范，沾边给改写）
+  caveat: string; // docs/42：L3 带「基于未复核采分点」措辞，L1/L2 为空串
 }
 
 // 按需讲解（点开某漏点的「追问讲解」按钮）：有界、不生成完整答案（no_full_answer）

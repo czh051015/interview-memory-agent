@@ -10,12 +10,12 @@
 
 - **项目**：PointLoop（逐点）= 申论逐点评分与错题回流 Agent（代码包名 offerloop，产品名≠包名，演进自早期面试备考模块）。评分定位「漏点识别传感器」，确定性规则产出全部事实证据、LLM 只保留无事实职责（灰带疑似标注 / 建议候选 / 拆解人审）。架构 / 命令 / 设计约定 / 坑 → `README.md`，不在此重复。
 - **当前主线**（谁依赖谁，本文件独有的动态信息）：
-  - `docs/38 双模式评分引擎（门禁+示证）`：主体已落地（HEAD=`19250ad` 2026-09-01「评分引擎切 LLM 默认 + 前后端对齐 + eval 体系收尾」）。**收尾项进行中**：D50 评测基线重建（门禁绿∪黄对金标 hit/miss 一致性 + 灰带疑似标注质量 + no_fool/nosource 回归）——README 里 score/medium 旧基线（LLM 判官时代口径）已退役待替换，口径按 docs/38 重建
-  - `docs/39 第 5 页签 + 录错题闭环`：状态行「待复核 → 复核后交 Claude Code 落地」（2026-09-02 定稿）——申论错题本入口归位、录入默认 = 录错题流。复核后即下一轮执行候选
-  - `docs/40 seed 模拟练习历史`：**已落地**（2026-09-06）——`scripts/seed_weak_history.py` + `src/shenlun/seed/` 五小模块（业务代码零改动），真实库已 seed 两批 12 道真题（默认 seed=773，`--seed` 换批），弱档案 49 漏点跨 13 题、红/黄/绿分层可演示；同 seed 重跑幂等跳过
-  - `docs/42 评分单模式化 + 采分点来源分层`：**已拍板待落地**（2026-09-07）——用户确认绕回单模式（内联题也要有三态判定），P-A~P-D 已定案（② 内联只进错题本不进提醒池 / B1 reflow 收 gate verdicts 对齐判据 / ① L3 漏点行内确认按钮 / ① guidance 全放开）。执行入口 = `docs/43-开工交接-42单模式化落地准备.md`（含 git 基线确认 / 必读 / 硬约束 / 口径差提示），等用户说「做」并指定执行 Agent
-  - ⚠️ **git 工作区存在大量未提交改动**（docs/32-40 计划书 + CHANGES 未跟踪；README / src / app / frontend / eval 多处 M；本轮新增 seed 工具未提交）——上一会话产物尚未收尾提交，任何 Agent 开工前先 `git status` 确认归属，勿覆盖在途工作；**`app/api/shenlun.py` 当前即 M 状态，42 落地前必须先与用户确认其 diff 归属**
-- **评测口径**：`tests/` 397 用例（pytest）+ `eval/` 四套件（score/decompose/demo/medium，`python scripts/run_evals.py`）。一票否决类指标 = 1.0 才发版；指标只验证「漏点识别可靠」，不是提分承诺。详见 README「评测」。
+  - `docs/42 评分单模式化 + 采分点来源分层`：**已落地**（2026-09-07）——评分恒 gate 三色（trusted 路由退役），可信度下沉为数据属性 `points_source`（L1 库题金标 / L2 手填 / L3 LLM 拆解「参考·未复核」）；内联漏点（L2/L3，P-A=②）只进错题本不进提醒池；reflow 入库判据按 B1 对齐 gate verdicts（verdicts 参数化，旧调用方不变）；guidance 对 L1/L2/L3 全放开（L3 带 caveat）。**取代 docs/38 的 D40（trusted 双模式路由）与 D48（示证档）；D41 防伪保留为 L1 定义，D42-D47（三态/灰带/建议区）全部保留**；`align_answer`/`SCORE_FORCE=align` 保留 deprecated 作回滚保底
+  - `docs/38 双模式评分引擎`：主体代码已并入基线（`4ecba21`），产品口径被 docs/42 取代（见上行）；**收尾项仍开放**：D50 评测基线重建（门禁绿∪黄对金标一致性 + 灰带疑似标注质量）——不受 42 影响，另行重建
+  - `docs/39 第 5 页签 + 录错题闭环`：wrongbook 内联通道（`inline_{hash}` ctx）已随基线入库，并作为 docs/42 L3「确认无误」闸门的复用点通过回归
+  - `docs/40 seed 模拟练习历史`：**已落地**（2026-09-06）——`scripts/seed_weak_history.py` + `src/shenlun/seed/` 五小模块，真实库已 seed 两批 12 道真题（默认 seed=773），弱档案 49 漏点跨 13 题；42 落地 demo 走沙箱副本，seed 数据零污染（回滚点 `data/shenlun.db.bak42`）
+  - **git 基线已收尾**（2026-09-07）：上一波 docs/32-40 在途改动已 commit 为 `4ecba21`（docs/38/39/40 落地 + 文档归档）；根目录 `_*.py`/`_pp_head.tsx`/`ocr_tmp.ps1` 调试草稿仍未跟踪未删除，待用户处置
+- **评测口径**：`tests/` 403 用例（pytest）+ `eval/` 四套件（score/decompose/demo/medium，`python scripts/run_evals.py`）。一票否决类指标 = 1.0 才发版；指标只验证「漏点识别可靠」，不是提分承诺。详见 README「评测」。
 
 ---
 
@@ -32,6 +32,22 @@
 - commit:<短 hash>
 - 验收批注:(WorkBuddy 填:通过 / 返工原因)
 ```
+
+## [2026-09-07] docs/42 落地：评分单模式化 + 采分点来源分层 — Claude Code
+- 对应计划:docs/42 §4 全部（M1-M5 + 交互/建议，P-A~P-D = ②/B1/①/①）+ §8 执行清单
+- 改动:后端 `app/api/shenlun.py`（_resolve 去trusted路由改 L1/L2/L3 分层、_mode 恒 gate、InlineGold 加 `points_source`、submit 响应带 `tier`、guidance 对 L1/L2/L3 全放开且 L3 带 caveat、parse/decompose_and_cache 响应带 `points_source=llm_parse`、无 points 内联 400 明确提示、complete 透传 verdicts）+ `src/shenlun/score.py`（新增纯函数 `result_from_verdicts`：verdicts→ScoreResult）+ `src/shenlun/reflow.py`（`reflow_answer` 加 verdicts 参数：hit=绿含LLM放行/miss=黄/suspect记miss+events追`suspect`标注行；不传回退旧口径）+ `src/shenlun/align.py`（标 deprecated，本期不删）。前端 `frontend/lib/types.ts`（InlineGold.points_source/GateResult.tier/GuidanceResult.caveat/ParseResult.points_source）+ `PracticePanel.tsx`（删模式角标与示证对照视图、题面配置改分层说明、L3 行「参考·未复核」标记、内联漏点「确认无误·入错题本」（P-C=① 单点粒度，走 docs/39 wrongbook 通道）、resolveGold 按 JSON/文字带 points_source）。测试 `tests/test_shenlun_api.py`（align 双模式用例改写为单模式分层用例；新增内联 L2/L3、无 points 400、guidance L2/L3、M5 三题判据一致性、suspect 事件标注等用例）
+- 验证:`python -m pytest -q tests/` → **403 passed**（基线 398 + 净增 5）；ruff 对改动文件零新增（存量 62 与基线持平，顺手修 shenlun.py 1 个 F401）；`tsc --noEmit` 通过；三路手工 demo（真实 uvicorn + DB/Chroma 沙箱副本，真实库 md5 零污染）：库内题 gate+L1 三色含真 LLM 灰带疑似、内联手填 L2+guidance 放开、LLM 拆 L3+caveat+确认入错题本 `sl_inline_{hash}`；M5 demo：complete 带 verdicts 后 9/9 增量与 submit 判定一致 + events suspect 标注 1 行；P-A=② demo：内联题 weak_points 行数 0
+- 遗留:① workbench 前端目前不调 practice/complete（本轮前即如此）——M5 的前端 verdicts 透传仅后端契约就绪，待前端接入 complete 流时回传；② ruff 存量 62 报错与本轮无关（基线即有，疑 ruff 版本规则漂移），建议单独清理一轮；③ 根目录 `_*.py`/`ocr_tmp.ps1` 等草稿未删未入库，待用户处置；④ 回滚路径：路由改回 `_mode(trusted)` 一行（align_answer/SCORE_FORCE 未删），DB 回滚点 `data/shenlun.db.bak42`；⑤ 简历条目 2/3「示证档/双模式」表述可启用路线 A 目标稿（WorkBuddy 事项，未动简历文件）
+- commit:待定（用户未指示 42 改动是否 commit；开工基线已 commit 为 `4ecba21`）
+- 验收批注:**✅ 通过（WorkBuddy 2026-09-08 定向核对）**——① git/流水吻合：基线 4ecba21 存在，42 改动 9 文件 M 未提交属实；② 代码抽查逐条属实：score.py:316 `result_from_verdicts` 纯函数、reflow.py:289 verdicts 参数 + events `suspect` 标注行（:350-357）、shenlun.py `_resolve` 三层 tier（:149-197）+ 无 points 400 提示（:189）+ submit 响应 `tier`（:264）+ L3 caveat（:354）+ `points_source`（:116）、align.py deprecated 标注（docstring :3）；③ 干净重跑 `python -m pytest -q tests/ --basetemp=.pytest_tmp` → **403 passed**（首次 326+77 errors 系 .pytest_tmp 残留污染，mv 清后复跑即绿，非代码问题）；④ docs/42 状态行「已落地」+ §4.3 口径差修正留档属实。遗留项 ①~⑤ 与本批注一致，照单跟进即可
+
+## [2026-09-07] 开工基线收尾：在途改动 commit 为干净基线（docs/43 §0 用户确认）— Claude Code
+- 对应计划:计划外（docs/43 §0 开工准备：git 在途清单 + app/api/shenlun.py diff 经用户确认归属后收尾）
+- 改动:将上一波 docs/38 双模式 + docs/39 错题本 + 录题入库/seed 的全部在途产物（26 个 M 文件 + align/question_store/seed/测试/WrongbookPanel/docs/32-43/CHANGES 等）commit 为基线 `4ecba21`；`.gitignore` 补 `.pytest_tmp/`；根目录 `_*.py` 等调试草稿与 `data/shenlun.db.bak` 按用户选择**未入库**
+- 验证:基线 commit 前 `python -m pytest -q tests/` → 398 passed（与 docs/43 口径一致；沙箱环境需 `--basetemp` 指到工作区内，系统 Temp 权限受限所致，本机正常 shell 不受影响）
+- 遗留:根目录草稿文件（_al/_scan*/_sg*/_sapi*/_s38*/_cfg.py、_pp_head.tsx、ocr_tmp.ps1）仍未删除，待用户处置
+- commit:4ecba21
+- 验收批注:
 
 ## [2026-09-07] docs/42 拍板定案 + 开工交接建档（docs/43）— WorkBuddy
 - 对应计划:docs/42（开发计划书-评分单模式化与采分点来源分层）

@@ -313,6 +313,34 @@ def gate_score(answer: str, points: list[Point], materials: str = "") -> list[Ga
     return out
 
 
+def result_from_verdicts(points: list[Point], verdicts: list[dict]) -> ScoreResult:
+    """gate verdicts（JSON 形态，docs/42 §4.0）→ ScoreResult：入库判据与展示判据统一。
+
+    docs/42 M5（P-B=B1）：reflow 入库改按 submit 展示的 gate 三态语义——
+    hit = 绿（规则 kw ∪ LLM 放行绿）；miss = 黄；suspect = 灰带疑似（记 miss，
+    suspect 标注由调用方在 events 落）。verdicts 与 points 同源（submit 响应原样回传），
+    个别点缺失时按 miss 兜底（不臆造命中）。evidence/anchor 回填作答原句与材料锚，
+    保持入库记录可溯源。纯函数，0 token。
+    """
+    by_id = {str(v.get("point_id")): v for v in verdicts or []}
+    result = ScoreResult()
+    for p in points:
+        v = by_id.get(p.id) or {}
+        if v.get("status") == "hit":
+            hit = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type,
+                        matched_text=v.get("evidence") or None,
+                        matched_by=str(v.get("matched_by") or "kw"),
+                        source_snippet=p.source_snippet)
+            hit.material_source = v.get("anchor")
+            result.hit_points.append(hit)
+        else:
+            miss = Point(id=p.id, point=p.point, keywords=p.keywords, score=p.score, type=p.type,
+                         source_snippet=p.source_snippet)
+            miss.material_source = v.get("anchor")
+            result.miss_points.append(miss)
+    return result
+
+
 # ── 响应契约（docs/38 §6）：PointVerdict —— 每条含 reason（为什么标，随评分返回）──
 # reason 文案（规则层固定，测试可钉；蓝行由 LLM reason 透传）：
 REASON_HIT_KW = "该点得分关键词均已出现：{kws}"      # 绿·关键词

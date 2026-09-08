@@ -29,7 +29,7 @@ from pathlib import Path
 
 from src.config import DATA_DIR, PROJECT_ROOT
 from src.cleaner.schema import utcnow
-from src.shenlun.score import Point, ScoreResult, score_answer, from_benchmark
+from src.shenlun.score import Point, ScoreResult, score_answer, from_benchmark, result_from_verdicts
 
 DB_PATH = DATA_DIR / "shenlun.db"
 
@@ -286,6 +286,7 @@ def reflow_answer(
     *,
     action: str = ACTION_ANSWERED,
     rounds: list[dict] | None = None,
+    verdicts: list[dict] | None = None,
 ) -> ReflowResult:
     """作答即入库：评分 → 写 answers → 更新薄弱点档案 → 写事件日志。
 
@@ -297,9 +298,18 @@ def reflow_answer(
       round_no 0=初稿，1..N=每轮逼近。传入 → 同一事务写 N 行 answer_rounds +
       answers 补 rounds（总轮数）/ initial_hit_ratio（初稿命中率，算逼近增益）。
       不传 → 单次作答（rounds=1，initial_hit_ratio=终稿命中率）。
+
+    verdicts（docs/42 M5·P-B=B1）：practice/submit 的 gate 三色判定原样透传 →
+      入库判据与展示判据统一（hit=绿含 LLM 放行绿 / miss=黄 / suspect=灰带疑似
+      记 miss，且有 events action="suspect" 标注行供诊断）。不传 → 回退
+      score_answer 旧口径（两段式 + 语义层，历史调用方行为不变）。
     """
     points = from_benchmark(reference_points)
-    result = score_answer(answer, points)
+    if verdicts is None:
+        result = score_answer(answer, points)
+    else:
+        result = result_from_verdicts(points, verdicts)
+    has_suspect = bool(verdicts) and any(v.get("status") == "suspect" for v in verdicts)
     now = utcnow().isoformat()
 
     rounds = list(rounds or [])
@@ -337,6 +347,14 @@ def reflow_answer(
             "INSERT INTO events(question_id,answer_id,action,ratio,ts) VALUES(?,?,?,?,?)",
             (question_id, answer_id, action, round(result.hit_ratio, 4), now),
         )
+        if has_suspect:
+            # docs/42 B1：疑似点按 miss 入库，events 留 suspect 标注行——
+            # 「库内 hit/miss 与展示判定一致，但该作答含 LLM 疑似漏点」可从此溯源
+            #（具体点看 answers.miss_ids ∩ submit verdicts suspect 项）。
+            conn.execute(
+                "INSERT INTO events(question_id,answer_id,action,ratio,ts) VALUES(?,?,?,?,?)",
+                (question_id, answer_id, "suspect", round(result.hit_ratio, 4), now),
+            )
         if revived_cnt:
             conn.execute(
                 "INSERT INTO events(question_id,answer_id,action,ratio,ts) VALUES(?,?,?,?,?)",

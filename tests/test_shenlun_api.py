@@ -1,19 +1,24 @@
-"""docs/20 Step A + docs/22 §3.5/§3.6 + docs/38 §6：申论工作台 API 测试（TestClient + mock LLM）。
+"""docs/20 Step A + docs/22 §3.5/§3.6 + docs/42 单模式契约：申论工作台 API 测试。
 
-覆盖（docs/38 双模式契约后）：
+覆盖（docs/42 单模式化后）：
   1. practice/start    → ReAct 推题返回题目/材料/题型/推荐理由（mock react.chat_json）
-  2. practice/submit   → 双模式分发：
-                          · 纯 question_id → trusted → gate：mode + verdicts（§6 PointVerdict
-                            全量字段：status/matched_by/terms/evidence/anchor/official/suspect/reason；
-                            anchor 全量下发，docs/36 老缺口修复）
+  2. practice/submit   → 单引擎 gate（库内/内联统一三色判定）+ 来源分层 tier：
+                          · §6 PointVerdict 全量字段（status/matched_by/terms/evidence/
+                            anchor/official/suspect/reason；anchor 全量下发）
                           · 灰带点走 judge_suspect（mock：放行绿·语义 / 标疑似两条路都断言）
-                          · gold.question_id 与库题一致 → gate；不一致/查无 → 400（D41 防伪造）
-                          · 内联无 qid → align（docs/37 配对结构，无三色）
-                          · SCORE_FORCE 强制 gate/align（docs/38 D49，monkeypatch src.config）
-  3. practice/guidance → 仅 gate 路由：③ 改进建议 gap/how/rewrite；align 模式 → 400 明确提示
-  4. wrongbook         → 按漏点一条入库（mock knowledge_store，docs/22 §3.6 口径保留）
-  5. practice/complete → 回流写 weak_points（临时 DB 验证）
-  6. remind            → 返回毕业考候选 + 该练 topK，且按紧急度排序
+                          · 纯 qid / gold.qid 一致 → tier=L1；不一致/查无 → 400（防伪保留）
+                          · 内联无 qid → 恒 gate：默认 points_source=manual → L2；
+                            points_source=llm_parse → L3（参考 · 未复核）
+                          · 内联无 points → 400（gate 无输入可判，示证档退役）
+                          · SCORE_FORCE 强制 gate/align（测试/回归锁定，align 已退役）
+  3. practice/guidance → L1/L2/L3 全放开（P-D=①）：gap/how/rewrite + caveat
+                          （L3 措辞带「未复核」）；L1/L2 caveat 为空
+  4. practice/parse    → LLM 拆点响应带 points_source="llm_parse"（M2 分层信号）
+  5. wrongbook         → 按漏点一条入库（mock knowledge_store，docs/22 §3.6 口径保留）
+  6. practice/complete → 回流写 weak_points（临时 DB 验证）；带 verdicts → 入库判据
+                          与 submit 展示判定一致（B1，抽查 3 题）；suspect 记 miss +
+                          events 标注；不带 verdicts → 旧口径兼容
+  7. remind            → 返回毕业考候选 + 该练 topK，且按紧急度排序
 
 注意：不 import app.main（会经 app.api.chat 链触发 chromadb —— pytest 环境 numpy
 access violation 坑，同 test_mock_api 注释）；用「独立 FastAPI + 本 router」构造 TestClient。
@@ -119,6 +124,7 @@ class TestPracticeParse:
         assert [p["id"] for p in data["points"]] == ["p1", "p2"]
         assert data["points"][0]["source_snippet"] == "两地开通了城际公交，实现了高速公路免费互通"
         assert data["warnings"] == ["第2点关键词偏少"]
+        assert data["points_source"] == "llm_parse"   # docs/42 M2：分层信号（前端回传 InlineGold）
         # trace：原文 + 同批点 + warnings（dev 前端展示用）
         assert data["trace"]["standard_answer"] == "一是设施互通：两地开通了城际公交……"
         assert data["trace"]["points"] == data["points"]
@@ -148,16 +154,17 @@ class TestPracticeParse:
 
 
 class TestPracticeSubmitGate:
-    """纯 question_id → trusted → 门禁：§6 PointVerdict 契约（含 anchor 全量下发）。"""
+    """纯 question_id → L1 → 门禁三色：§6 PointVerdict 契约（含 anchor 全量下发）。"""
 
     def test_submit_full_hit_gate_contract(self, db):
-        """全关键词作答 → mode=gate，verdicts 全绿·关键词，契约字段齐全。"""
+        """全关键词作答 → mode=gate + tier=L1，verdicts 全绿·关键词，契约字段齐全。"""
         n = len(load_question(QID)["gold"]["reference_points"])
         r = client.post("/api/shenlun/practice/submit",
                         json={"question_id": QID, "answer": _full_answer(QID)})
         assert r.status_code == 200
         data = r.json()
         assert data["mode"] == "gate"
+        assert data["tier"] == "L1"                  # docs/42：库题金标分层
         assert len(data["verdicts"]) == n            # 顺序 = 采分点顺序（§6 按 point_order 逐点）
         assert data["warnings"] == []
         first = data["verdicts"][0]
@@ -227,8 +234,8 @@ class TestPracticeSubmitGate:
         assert r.status_code == 404
 
 
-class TestPracticeSubmitTrusted:
-    """docs/38 D41：gold.question_id 声明 → 与库题全量比对，trusted 语义底线。"""
+class TestSubmitL1LibraryGold:
+    """docs/42 L1：gold.question_id 声明 → 与库题全量比对，防伪语义保留（原 D41）。"""
 
     @staticmethod
     def _gold_for(qid: str) -> dict:
@@ -239,15 +246,17 @@ class TestPracticeSubmitTrusted:
                 "question": item["task"]["question"],
                 "qtype": item["meta"]["type"]}
 
-    def test_gold_with_consistent_qid_is_gate(self, db):
-        """gold.question_id 与库题逐点一致 → trusted → 门禁模式。"""
+    def test_gold_with_consistent_qid_is_gate_L1(self, db):
+        """gold.question_id 与库题逐点一致 → gate + tier=L1（防伪比对通过即金标）。"""
         r = client.post("/api/shenlun/practice/submit",
                         json={"gold": self._gold_for(QID), "answer": "开通了城际公交。"})
         assert r.status_code == 200
-        assert r.json()["mode"] == "gate"
+        data = r.json()
+        assert data["mode"] == "gate"
+        assert data["tier"] == "L1"
 
     def test_gold_qid_forged_points_400(self, db):
-        """声称库题 qid 但塞了自造 points → 400（防伪造 qid 蹭门禁）。"""
+        """声称库题 qid 但塞了自造 points → 400（防伪造 qid 蹭 L1 金标）。"""
         gold = self._gold_for(QID)
         gold["points"] = [{"id": "c1", "point": "自造点", "keywords": ["随便"],
                            "score": 1, "point_type": "对策"}]
@@ -257,7 +266,7 @@ class TestPracticeSubmitTrusted:
         assert "不一致" in r.json()["detail"]
 
     def test_gold_qid_partial_point_tamper_400(self, db):
-        """只改一个点的 keywords → 400（全量比对 id+point+keywords，§10 注意3）。"""
+        """只改一个点的 keywords → 400（全量比对 id+point+keywords）。"""
         gold = self._gold_for(QID)
         gold["points"] = [dict(p, keywords=["偷改的关键词"]) if p["id"] == "c1" else p
                           for p in gold["points"]]
@@ -276,47 +285,71 @@ class TestPracticeSubmitTrusted:
         assert "不存在" in r.json()["detail"]
 
 
-class TestPracticeSubmitAlign:
-    """内联 gold 无 question_id → trusted=False → 示证（docs/37 §6 配对结构）。"""
+class TestPracticeSubmitInline:
+    """docs/42 单模式化核心：内联无 qid → 恒 gate 三色判定（不再走示证 align）。"""
 
     @staticmethod
-    def _inline_gold() -> dict:
-        return {"points": [
+    def _inline_gold(**extra) -> dict:
+        gold = {"points": [
             {"id": "c1", "point": "设施互通", "keywords": ["城际公交"], "score": 1,
              "point_type": "对策"},
             {"id": "c2", "point": "产业协同", "keywords": ["新能源"], "score": 1,
              "point_type": "对策"},
         ], "material": "A区开通城际公交，实现互联互通。新能源项目落地B县。",
             "question": "概括举措", "qtype": "归纳概括"}
+        gold.update(extra)
+        return gold
 
-    def test_inline_no_qid_returns_align(self, db):
-        """无 qid 内联 → mode=align：配对结构齐全，无三色/疑似/建议。"""
+    def test_inline_no_qid_returns_gate_L2(self, db):
+        """内联手填（默认 points_source=manual）→ mode=gate + tier=L2 三色判定。
+
+        docs/42 验收 1：内联题返回 mode="gate" + verdicts，不再出现 mode="align"。
+        """
         r = client.post("/api/shenlun/practice/submit",
                         json={"gold": self._inline_gold(), "answer": "A区开了城际公交。"})
         assert r.status_code == 200
         data = r.json()
-        assert data["mode"] == "align"
-        assert set(data) == {"mode", "official_points", "answer_chunks",
-                             "alignments", "gaps", "orphans", "meta"}
-        assert data["meta"]["engine"] == "align" and data["meta"]["semantic_used"] is False
-        c1 = next(a for a in data["alignments"] if a["point_id"] == "c1")
-        assert c1["method"] == "kw" and c1["kws_hit"] == ["城际公交"]
-        assert "c2" in {g["point_id"] for g in data["gaps"]}    # 未见对应候选
-        assert data["official_points"][0]["material_ref"]        # 出处附注随点返回
+        assert data["mode"] == "gate"
+        assert data["tier"] == "L2"
+        by_id = {v["point_id"]: v for v in data["verdicts"]}
+        assert by_id["c1"]["status"] == "hit" and by_id["c1"]["matched_by"] == "kw"
+        assert by_id["c2"]["status"] == "miss" and by_id["c2"]["evidence"] == ""
+        assert by_id["c2"]["anchor"] and "材料第" in by_id["c2"]["anchor"]  # 黄行也带锚
 
-    def test_gold_qid_consistent_plus_inline_points_used(self, db):
-        """trusted 的评分用提交的内联 points（校验一致过），响应仍是 gate。"""
-        gold = self._inline_gold()
-        gold["question_id"] = QID                                # 声称库题但内容不一致 → 400
+    def test_inline_llm_parse_is_L3(self, db):
+        """points_source=llm_parse → tier=L3：判定照给（三色同权），分层仅标记。"""
+        gold = self._inline_gold(points_source="llm_parse")
         r = client.post("/api/shenlun/practice/submit",
                         json={"gold": gold, "answer": "A区开了城际公交。"})
-        assert r.status_code == 400                              # 库题 9 点 ≠ 内联 2 点
+        assert r.status_code == 200
+        data = r.json()
+        assert data["mode"] == "gate"
+        assert data["tier"] == "L3"
+        assert len(data["verdicts"]) == 2  # 判定与 L2 完全同权
+
+    def test_inline_without_points_400(self, db):
+        """内联无采分点（gate 无输入可判）→ 400 提示先提供标准答案/采分点（docs/43 §6）。"""
+        r = client.post("/api/shenlun/practice/submit",
+                        json={"gold": {"points": [], "material": "", "question": "题",
+                                       "qtype": "归纳概括"},
+                              "answer": "随便写写"})
+        assert r.status_code == 400
+        assert "采分点" in r.json()["detail"]
+
+    def test_gold_qid_consistent_plus_inline_points_used(self, db):
+        """声称库题 qid 但内容不一致 → 400（库题 9 点 ≠ 内联 2 点，防伪不放松）。"""
+        gold = self._inline_gold()
+        gold["question_id"] = QID
+        r = client.post("/api/shenlun/practice/submit",
+                        json={"gold": gold, "answer": "A区开了城际公交。"})
+        assert r.status_code == 400
 
 
 class TestScoreForce:
-    """docs/38 D49：SCORE_FORCE 强制模式（测试/演示锁定，防 trusted 逻辑漂移）。"""
+    """SCORE_FORCE 强制模式（测试/演示锁定）：gate 默认恒定，align 保底可复现（M4 不删）。"""
 
-    def test_force_align_overrides_trusted_qid(self, db, monkeypatch):
+    def test_force_align_overrides_library_qid(self, db, monkeypatch):
+        """SCORE_FORCE=align 仍可强制示证对照（回滚路径保留，验收 1 的除外条款）。"""
         monkeypatch.setattr(cfg, "SCORE_FORCE", "align")
         r = client.post("/api/shenlun/practice/submit",
                         json={"question_id": QID, "answer": "开通了城际公交。"})
@@ -324,8 +357,9 @@ class TestScoreForce:
         assert r.json()["mode"] == "align"
 
     def test_force_gate_on_inline_no_qid(self, db, monkeypatch):
+        """SCORE_FORCE=gate 锁定与默认行为一致（内联恒 gate，锁定防漂移）。"""
         monkeypatch.setattr(cfg, "SCORE_FORCE", "gate")
-        gold = TestPracticeSubmitAlign._inline_gold()
+        gold = TestPracticeSubmitInline._inline_gold()
         r = client.post("/api/shenlun/practice/submit",
                         json={"gold": gold, "answer": "A区开了城际公交。"})
         assert r.status_code == 200
@@ -335,11 +369,11 @@ class TestScoreForce:
 
 
 class TestPracticeGuidance:
-    """docs/38 §4.3：③改进建议只对门禁题开放（mode=gate），gap/how/rewrite 三字段。"""
+    """docs/42 P-D=①：③改进建议 L1/L2/L3 全放开，gap/how/rewrite + caveat 分层措辞。"""
 
     @patch("src.mock.chat_json")
     def test_guidance_gate_returns_improvement(self, mock_llm, db):
-        """门禁题点开 → official 规则层回传 + 建议三件套（单次 LLM，不判因/不回放②）。"""
+        """库内题（L1）点开 → official 规则层回传 + 建议三件套；caveat 为空。"""
         mock_llm.return_value = {
             "gap": "该点只写了产业，没落到协同机制上",
             "how": "回到材料中「新能源项目」句，把做法展开成产业链协作",
@@ -349,11 +383,34 @@ class TestPracticeGuidance:
                         json={"question_id": QID, "point_id": "c2", "answer": "不相关"})
         assert r.status_code == 200
         g = r.json()
-        assert set(g) == {"point_id", "point", "official", "gap", "how", "rewrite"}
+        assert set(g) == {"point_id", "point", "official", "gap", "how", "rewrite", "caveat"}
         assert g["point_id"] == "c2" and g["point"] == "产业协同"
         assert g["official"] and not g["official"].startswith("材料第")  # D46 锚句原文
         assert g["gap"] and g["how"] and g["rewrite"]
+        assert g["caveat"] == ""                       # L1 金标：无需未复核提示
         assert mock_llm.call_count == 1
+
+    @patch("src.mock.chat_json")
+    def test_guidance_inline_l2_open(self, mock_llm, db):
+        """内联手填题（L2）建议同样放开（P-D=①：400 孤岛分支删除），caveat 为空。"""
+        mock_llm.return_value = {"gap": "g", "how": "h", "rewrite": "r"}
+        gold = TestPracticeSubmitInline._inline_gold()
+        r = client.post("/api/shenlun/practice/guidance",
+                        json={"gold": gold, "point_id": "c1", "answer": "A区开了城际公交。"})
+        assert r.status_code == 200
+        g = r.json()
+        assert g["point_id"] == "c1" and g["gap"] == "g"
+        assert g["caveat"] == ""
+
+    @patch("src.mock.chat_json")
+    def test_guidance_l3_caveat_flags_unreviewed(self, mock_llm, db):
+        """L3（LLM 拆解采分点）→ caveat 带「未复核」措辞（P-D=① 附加要求）。"""
+        mock_llm.return_value = {"gap": "g", "how": "h", "rewrite": "r"}
+        gold = TestPracticeSubmitInline._inline_gold(points_source="llm_parse")
+        r = client.post("/api/shenlun/practice/guidance",
+                        json={"gold": gold, "point_id": "c1", "answer": "A区开了城际公交。"})
+        assert r.status_code == 200
+        assert "未复核" in r.json()["caveat"]
 
     @patch("src.mock.chat_json")
     def test_guidance_llm_failure_keeps_official(self, mock_llm, db):
@@ -368,22 +425,12 @@ class TestPracticeGuidance:
 
     @patch("src.mock.chat_json")
     def test_guidance_hit_point_guidable(self, mock_llm, db):
-        """命中点也可点开（核对官方写法）——guidance 不限漏点（§4.3 ③ 三态入口一致）。"""
+        """命中点也可点开（核对官方写法）——guidance 不限漏点（三态入口一致）。"""
         mock_llm.return_value = {"gap": "无", "how": "核对官方写法", "rewrite": ""}
         r = client.post("/api/shenlun/practice/guidance",
                         json={"question_id": QID, "point_id": "c1", "answer": _full_answer(QID)})
         assert r.status_code == 200
         assert mock_llm.call_count == 1
-
-    @patch("src.mock.chat_json")
-    def test_guidance_align_mode_rejected_400(self, mock_llm, db):
-        """内联无 qid（示证模式）→ 400 明确拒绝：不生成改进建议（红线，不越过差异标注）。"""
-        gold = TestPracticeSubmitAlign._inline_gold()
-        r = client.post("/api/shenlun/practice/guidance",
-                        json={"gold": gold, "point_id": "c1", "answer": "A区开了城际公交。"})
-        assert r.status_code == 400
-        assert "示证模式" in r.json()["detail"]
-        mock_llm.assert_not_called()   # 模式路由先行，根本没机会调 LLM
 
     def test_guidance_unknown_point_404(self, db):
         r = client.post("/api/shenlun/practice/guidance",
@@ -452,8 +499,20 @@ class TestWrongbook:
 
 
 class TestPracticeComplete:
+    @staticmethod
+    def _rounds(answer: str) -> list[dict]:
+        return [{"round_no": 0, "answer": answer, "hit_ids": [], "miss_ids": [],
+                 "hit_ratio": 0.0, "guided_point_ids": []}]
+
+    def _submit_verdicts(self, qid: str, answer: str) -> list[dict]:
+        """走真实 submit 链路拿 verdicts（judge_suspect 由 autouse fixture mock 全放行）。"""
+        r = client.post("/api/shenlun/practice/submit",
+                        json={"question_id": qid, "answer": answer})
+        assert r.status_code == 200
+        return r.json()["verdicts"]
+
     def test_complete_writes_reflow(self, db):
-        """complete 回流 → weak_points 表有写入（临时 DB 验证）。"""
+        """complete 回流（不带 verdicts = 旧口径兼容）→ weak_points 表有写入。"""
         rounds = [
             {"round_no": 0, "answer": "城际公交免费互通", "hit_ids": ["c1"], "miss_ids": [],
              "hit_ratio": 1.0, "guided_point_ids": []},
@@ -474,6 +533,51 @@ class TestPracticeComplete:
         r = client.post("/api/shenlun/practice/complete",
                         json={"question_id": QID, "rounds": []})
         assert r.status_code == 422
+
+    def test_complete_verdicts_match_submit_three_questions(self, db):
+        """docs/42 验收 4（P-B=B1）：抽查 3 题——complete 带 verdicts 后库内
+        weak_points 的 miss/hit 与 submit 展示判定一致（展示判据 = 入库判据）。"""
+        cases = [
+            (QID, _full_answer(QID)),               # 预期全绿
+            ("jiangsu_2023_a_1", "不相关"),          # 预期全黄
+            ("jiangsu_2022_b_1", "随便写两句"),      # 预期全黄（题型/点数各异，防巧合）
+        ]
+        for qid, answer in cases:
+            verdicts = self._submit_verdicts(qid, answer)
+            assert verdicts, f"{qid} 应有判定"
+            r = client.post("/api/shenlun/practice/complete", json={
+                "question_id": qid, "rounds": self._rounds(answer), "verdicts": verdicts})
+            assert r.status_code == 200
+            conn = sqlite3.connect(str(db))
+            miss_by_key = dict(conn.execute(
+                "SELECT point_key, miss_count FROM weak_points WHERE question_id=?",
+                (qid,)).fetchall())
+            conn.close()
+            assert len(miss_by_key) == len(verdicts)
+            for v in verdicts:
+                key = f"{qid}:{v['point_id']}"
+                expect_miss = 0 if v["status"] == "hit" else 1
+                assert miss_by_key[key] == expect_miss, \
+                    f"{key}：submit 判定 {v['status']} 与入库 miss_count={miss_by_key[key]} 不一致"
+
+    def test_complete_verdicts_suspect_recorded_miss_with_event(self, db):
+        """B1：灰带疑似 → 记 miss（档案不臆造命中）+ events 追加 suspect 标注行。"""
+        mark = {"label": "疑似宽泛", "reason": "只写了获得感口号，没写就医消费等具体内容"}
+        with patch("app.api.shenlun.judge_suspect", return_value=({"c8": mark}, [])):
+            verdicts = self._submit_verdicts(QID, "增强了获得感幸福感。")
+        assert next(v for v in verdicts if v["point_id"] == "c8")["status"] == "suspect"
+        r = client.post("/api/shenlun/practice/complete", json={
+            "question_id": QID, "rounds": self._rounds("增强了获得感幸福感。"),
+            "verdicts": verdicts})
+        assert r.status_code == 200
+        conn = sqlite3.connect(str(db))
+        miss8 = conn.execute("SELECT miss_count FROM weak_points WHERE point_key=?",
+                             (f"{QID}:c8",)).fetchone()[0]
+        suspect_events = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE action='suspect'").fetchone()[0]
+        conn.close()
+        assert miss8 == 1           # 疑似点按 miss 入库
+        assert suspect_events == 1  # events 留 suspect 标注（诊断可溯源）
 
 
 class TestRemind:
