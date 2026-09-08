@@ -1,11 +1,12 @@
-"""Eval 全套统一入口：串起 4 个申论 eval 套件 + 时间戳归档 + 与上一轮回归对比。
+"""Eval 全套统一入口：串起 5 个申论 eval 套件 + 时间戳归档 + 与上一轮回归对比。
 
 零侵入：只 subprocess 调用并复制结果，不 import 任何一个 eval 模块内部逻辑。
-套件（docs/19 §3 改造 + docs/22 §6 换示证后 + docs/24 接入 medium）：
+套件（docs/19 §3 改造 + docs/22 §6 换示证后 + docs/24 接入 medium + memory 闭环回归）：
   1. score     评分传感器（确定性，秒级）
   2. decompose 拆解质量（LLM，金标对照 + 脏标答）
   3. demo      示证 eval（docs/22 §6：L1 材料锚定 + 单点示证，替代旧 guidance）
   4. medium    中间态档 eval（docs/24：fuzzy 漏判率 + nosource 假阳性率，确定性 0 token）
+  5. memory    记忆闭环生命周期 eval（毕业/隔离/复活/排序/疑似溯源/内联零通道，0 token）
 用法：
   python scripts/run_evals.py                 # 跑全部 4 套件 + 归档 + 与上一轮对比
   python scripts/run_evals.py --no-compare    # 跳过对比生成（仅归档）
@@ -36,6 +37,7 @@ SUITES = [
     ("decompose", "eval/decompose_eval.py", "decompose_eval_results.json"),
     ("demo", "eval/demo_eval.py", "demo_eval_results.json"),
     ("medium", "eval/medium_eval.py", "medium_eval_results.json"),
+    ("memory", "eval/memory_eval.py", "memory_eval_results.json"),
 ]
 
 # 8 项 headline 指标：(指标名, 套件, extract 后 summary 里的路径, 方向)
@@ -49,6 +51,7 @@ HEADLINE = [
     ("评分 discrimination", "score", "mean_discrimination", "up"),
     ("中间态漏判率（fuzzy）", "medium", "fuzzy_miss_rate", "down"),      # 加语义层后应下降
     ("中间态假阳性率（nosource）", "medium", "nosource_fp_rate", "down"),  # 加材料结合度后应下降
+    ("记忆闭环行为达标率", "memory", "memory_pass_rate", "up"),            # 生命周期回归（docs/17）
 ]
 
 
@@ -154,6 +157,23 @@ def extract_summary(run_dir: Path) -> dict:
             "fuzzy_miss_rate": sm.get("fuzzy_miss_rate"),        # 期望给分但系统漏判（↓）
             "nosource_n": sm.get("nosource_n"),
             "nosource_fp_rate": sm.get("nosource_fp_rate"),      # 系统命中但人工不该给（↓）
+        }
+        summary["labels"]["llm_calls"] += sm.get("llm_calls") or 0
+
+    # memory（记忆闭环生命周期：达标率 ↑ + 两类红线须 0——内联泄漏 / 疑似缺溯源）
+    mm = _load_json(run_dir / "memory_eval_results.json")
+    if mm is None:
+        summary["suites"]["memory"] = {"ok": False, "error": "json 缺失或损坏"}
+    else:
+        sm = mm.get("summary", {})
+        summary["suites"]["memory"] = {
+            "ok": True,
+            "scenario_count": sm.get("scenario_count"),
+            "checks_total": sm.get("checks_total"),
+            "checks_passed": sm.get("checks_passed"),
+            "memory_pass_rate": sm.get("memory_pass_rate"),
+            "inline_reflow_leak": sm.get("inline_reflow_leak"),   # 红线 ==0
+            "suspect_untraced": sm.get("suspect_untraced"),       # 红线 ==0
         }
         summary["labels"]["llm_calls"] += sm.get("llm_calls") or 0
 

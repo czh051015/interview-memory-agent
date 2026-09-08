@@ -1,0 +1,203 @@
+{
+  "summary": {
+    "scenario_count": 10,
+    "checks_total": 22,
+    "checks_passed": 22,
+    "memory_pass_rate": 1.0,
+    "inline_reflow_leak": 0,
+    "suspect_untraced": 0,
+    "llm_calls": 0
+  },
+  "rows": [
+    {
+      "sid": "S1",
+      "desc": "毕业正路径：连击3+间隔8天 → 候选 → 毕业考命中 → graduated 退出提醒池",
+      "checks": [
+        {
+          "name": "毕业候选成立",
+          "ok": true,
+          "detail": "candidates=['jiangsu_2023_a_1:c1']"
+        },
+        {
+          "name": "毕业考命中即毕业",
+          "ok": true,
+          "detail": "graduated=['c1']"
+        },
+        {
+          "name": "毕业点退出提醒池",
+          "ok": true,
+          "detail": "state=graduated"
+        }
+      ],
+      "passed": 3,
+      "total": 3
+    },
+    {
+      "sid": "S2",
+      "desc": "连击不足：命中 2 次（<3）→ 非候选，毕业考命中也不毕业",
+      "checks": [
+        {
+          "name": "连击不足非候选",
+          "ok": true,
+          "detail": "consecutive_hits=2"
+        },
+        {
+          "name": "未候选不毕业",
+          "ok": true,
+          "detail": "graduated=[]"
+        }
+      ],
+      "passed": 2,
+      "total": 2
+    },
+    {
+      "sid": "S3",
+      "desc": "间隔不足：连击 3 但距 last_hit 仅 1 天（<7）→ 间隔验证拦截",
+      "checks": [
+        {
+          "name": "间隔不足非候选",
+          "ok": true,
+          "detail": "candidates=[]"
+        }
+      ],
+      "passed": 1,
+      "total": 1
+    },
+    {
+      "sid": "S4",
+      "desc": "毕业考失败：候选点毕业考 miss → 不毕业且连续命中归零",
+      "checks": [
+        {
+          "name": "考砸不毕业",
+          "ok": true,
+          "detail": "state=active"
+        },
+        {
+          "name": "连击归零重来",
+          "ok": true,
+          "detail": "consecutive_hits=0"
+        }
+      ],
+      "passed": 2,
+      "total": 2
+    },
+    {
+      "sid": "S5",
+      "desc": "隔离防死锁：30 轮全漏（真实参数）→ stuck 退出提醒池",
+      "checks": [
+        {
+          "name": "长期不补转隔离",
+          "ok": true,
+          "detail": "attempts=30"
+        },
+        {
+          "name": "隔离点退出提醒池",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "passed": 2,
+      "total": 2
+    },
+    {
+      "sid": "S6",
+      "desc": "隔离复活：stuck 点再练 → 回 active + events 记 revive",
+      "checks": [
+        {
+          "name": "隔离前状态为 stuck",
+          "ok": true,
+          "detail": "pre=stuck"
+        },
+        {
+          "name": "再练复活回 active",
+          "ok": true,
+          "detail": "state=active"
+        },
+        {
+          "name": "events 留 revive 行",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "passed": 3,
+      "total": 3
+    },
+    {
+      "sid": "S7",
+      "desc": "遗忘衰减排序：同漏 1 次，8 天未练排在前（紧急度=弱点权重×遗忘程度）",
+      "checks": [
+        {
+          "name": "更久未练排更前",
+          "ok": true,
+          "detail": "urgency c2=0.3297 c3=0.0"
+        },
+        {
+          "name": "排序单调生效",
+          "ok": true,
+          "detail": "order=['jiangsu_2023_a_1:c2', 'jiangsu_2023_a_1:c3', 'jiangsu_2023_a_1:c1']"
+        }
+      ],
+      "passed": 2,
+      "total": 2
+    },
+    {
+      "sid": "S8",
+      "desc": "提醒池过滤：graduated/stuck 不进池、pinned 进池、档案完整保留",
+      "checks": [
+        {
+          "name": "毕业/隔离不进提醒池",
+          "ok": true,
+          "detail": "pool=['jiangsu_2023_a_1:c3']"
+        },
+        {
+          "name": "钉住点留在提醒池",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "档案只出池不删档",
+          "ok": true,
+          "detail": "archive=['jiangsu_2023_a_1:c1', 'jiangsu_2023_a_1:c2', 'jiangsu_2023_a_1:c3']"
+        }
+      ],
+      "passed": 3,
+      "total": 3
+    },
+    {
+      "sid": "S9",
+      "desc": "疑似溯源红线：suspect 按 miss 入库（B1 判据统一）且 events 必留 suspect 行",
+      "checks": [
+        {
+          "name": "疑似点按 miss 入库",
+          "ok": true,
+          "detail": "miss_count=1"
+        },
+        {
+          "name": "events 留 suspect 溯源行",
+          "ok": true,
+          "detail": "actions=['answered', 'suspect']"
+        }
+      ],
+      "passed": 2,
+      "total": 2
+    },
+    {
+      "sid": "S10",
+      "desc": "内联零通道红线：非库内 qid 走 practice/complete → 404 且 weak_points 零写入",
+      "checks": [
+        {
+          "name": "内联 complete 被拒（404）",
+          "ok": true,
+          "detail": "http=404"
+        },
+        {
+          "name": "内联零写入 weak_points",
+          "ok": true,
+          "detail": "rows=0"
+        }
+      ],
+      "passed": 2,
+      "total": 2
+    }
+  ]
+}

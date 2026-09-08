@@ -1,6 +1,6 @@
 {
   "run_id": "baseline",
-  "created_at": "2026-08-31T10:03:26",
+  "created_at": "2026-09-08T15:05:40",
   "labels": {
     "llm_calls": 90
   },
@@ -9,24 +9,24 @@
       "ok": true,
       "data_count": 36,
       "n_points": 213,
-      "mean_discrimination": 0.899,
+      "mean_discrimination": 0.809,
       "no_fool": 1.0,
       "per_type": {
-        "应用文": 0.788,
-        "综合分析": 0.951,
-        "归纳概括": 0.929,
-        "提出对策": 1.0
+        "应用文": 0.766,
+        "综合分析": 0.836,
+        "归纳概括": 0.836,
+        "提出对策": 0.767
       },
-      "good_leak_count": 1,
+      "good_leak_count": 0,
       "bad_fooled_ids": []
     },
     "decompose": {
       "ok": true,
       "decomposed_count": 36,
-      "point_recall": 0.878,
-      "fabrication_rate": 0.064,
-      "structural_ok": 0.963,
-      "score_deviation_mean": 0.008,
+      "point_recall": 0.884,
+      "fabrication_rate": 0.048,
+      "structural_ok": 1.0,
+      "score_deviation_mean": 0.013,
       "over_split_flags": [],
       "dirty_robustness": 1.0,
       "calibrated": false
@@ -42,6 +42,23 @@
       "hit_snippet_ok": 1.0,
       "demo_generated": 19,
       "empty_demo_count": 0
+    },
+    "medium": {
+      "ok": true,
+      "sample_count": 7,
+      "fuzzy_n": 4,
+      "fuzzy_miss_rate": 0.5357,
+      "nosource_n": 3,
+      "nosource_fp_rate": 1.0
+    },
+    "memory": {
+      "ok": true,
+      "scenario_count": 10,
+      "checks_total": 22,
+      "checks_passed": 22,
+      "memory_pass_rate": 1.0,
+      "inline_reflow_leak": 0,
+      "suspect_untraced": 0
     }
   }
 }

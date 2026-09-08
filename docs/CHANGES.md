@@ -15,7 +15,7 @@
   - `docs/39 第 5 页签 + 录错题闭环`：wrongbook 内联通道（`inline_{hash}` ctx）已随基线入库，并作为 docs/42 L3「确认无误」闸门的复用点通过回归
   - `docs/40 seed 模拟练习历史`：**已落地**（2026-09-06）——`scripts/seed_weak_history.py` + `src/shenlun/seed/` 五小模块，真实库已 seed 两批 12 道真题（默认 seed=773），弱档案 49 漏点跨 13 题；42 落地 demo 走沙箱副本，seed 数据零污染（回滚点 `data/shenlun.db.bak42`）
   - **git 基线已收尾**（2026-09-07）：上一波 docs/32-40 在途改动已 commit 为 `4ecba21`（docs/38/39/40 落地 + 文档归档）；根目录 `_*.py`/`_pp_head.tsx`/`ocr_tmp.ps1` 调试草稿仍未跟踪未删除，待用户处置
-- **评测口径**：`tests/` 403 用例（pytest）+ `eval/` 四套件（score/decompose/demo/medium，`python scripts/run_evals.py`）。一票否决类指标 = 1.0 才发版；指标只验证「漏点识别可靠」，不是提分承诺。详见 README「评测」。
+- **评测口径**：`tests/` 403 用例（pytest）+ `eval/` 五套件（score/decompose/demo/medium/memory，`python scripts/run_evals.py`）。一票否决类指标 = 1.0 才发版；指标只验证「漏点识别可靠」，不是提分承诺。详见 README「评测」。
 
 ---
 
@@ -32,6 +32,14 @@
 - commit:<短 hash>
 - 验收批注:(WorkBuddy 填:通过 / 返工原因)
 ```
+
+## [2026-09-08] memory 评测套件落地：记忆闭环生命周期回归入 eval 体系 — Claude Code
+- 对应计划:计划外（用户提出「受控记忆闭环缺业务量化收口」并选定方案 B：照四套件模式补 memory 套件；本轮为简历材料语境下的数字补测，口径冻结于 `eval/memory_eval.py` docstring）
+- 改动:新增 `eval/memory_eval.py`（10 场景 × 22 检查项，逐场景临时库隔离，确定性 0 token、真实参数不 patch：S1-S4 毕业闭环=候选判定/毕业考命中毕业/考砸连击归零/连击与间隔双拦截、S5-S6 隔离防死锁 30 轮真实参数与复活、S7 遗忘衰减排序、S8 提醒池过滤与档案保留、S9 疑似按 miss 入库必留 suspect 溯源行（docs/42 B1 口径）、S10 内联题 complete 404 零写入红线；红线 2 条=内联泄漏/疑似缺溯源）+ `scripts/run_evals.py`（SUITES 接入第 5 套件、extract_summary 扁平化 memory 块、HEADLINE 加「记忆闭环行为达标率」↑）+ `README.md` 评测表补 memory 行
+- 验证:`python eval/memory_eval.py` → **22/22 达标率 100%，红线内联泄漏 0、疑似缺溯源 0，llm_calls=0**（结果归档 eval/results/baseline/memory_eval_results.json）；`ruff check eval/memory_eval.py scripts/run_evals.py` 零报错；`python scripts/run_evals.py --baseline` → 5/5 json 登记，后续真实 run 以此为对比基准
+- 遗留:① 全套件 `python scripts/run_evals.py` 未跑（decompose/demo 需 DeepSeek key，本轮避免 LLM 成本），下次正常回归五套件同跑以验证 comparison 兼容；② 简历草稿「AI 疑似标注与未经人审采分点一律不固化为漏答」与 docs/42 B1 拍板（suspect 按 miss 入库 + events 溯源、内联零通道）存在口径差——前半句建议改「疑似不硬判命中、入库必留溯源、命中即复活」，后半句（内联/未人审零回流通道）成立，待用户定稿简历措辞；③ README「397 个 pytest 用例」实为 403，存量偏差未顺手改（非本轮范围）
+- commit:待回填
+- 验收批注:(待 WorkBuddy 填)
 
 ## [2026-09-07] docs/42 落地：评分单模式化 + 采分点来源分层 — Claude Code
 - 对应计划:docs/42 §4 全部（M1-M5 + 交互/建议，P-A~P-D = ②/B1/①/①）+ §8 执行清单

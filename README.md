@@ -66,6 +66,7 @@
 | decompose | 拆解质量：金标对照 + 脏标答鲁棒性 | recall 0.884 / fabrication 0.048 / structural 1.0 / dirty 1.0 |
 | demo | 引导质检：材料锚定 / 红线 | material_anchored 1.0 / no_full_answer 1.0 / no_fabrication 1.0 |
 | medium | 语义冒烟：fuzzy 漏判 / nosource 假阳 | fuzzy_miss 0.75 / nosource_fp 1.0 ⚠️ |
+| memory | 记忆闭环生命周期：毕业 / 隔离 / 复活 / 遗忘排序 / 疑似溯源 / 内联零通道 | 达标 22/22（10 场景 · 0 token）· 红线 0（2026-09-08） |
 
 口径说明：
 
