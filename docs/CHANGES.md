@@ -33,6 +33,14 @@
 - 验收批注:(WorkBuddy 填:通过 / 返工原因)
 ```
 
+## [2026-09-08] README 按现状重写：去面试域历史叙述，对齐 docs/42 单模式化 + 来源分层 — Claude Code
+- 对应计划:计划外（用户指定：「README 不要说之前面试的内容，按现在的真实情况重写」）
+- 改动:重写 `README.md`——① 删全部面试域历史叙述（包名由来改中性一句「历史命名保留」、遗留模块改「历史遗留待清理」不提前身域、FAQ 删 Ollama 面试域句）；② 修正滞后架构：「双模式评分路由（trusted）」整节替换为「单模式评分与来源分层」（gate 恒三色 + points_source L1/L2/L3 分流表 + 只有 L1 进记忆闭环红线 + align 退役说明），能力表 / 数据与记忆 / FAQ 同步（含 docs/42 B1：疑似按 miss 入库必留溯源、内联零回流通道）；③ 架构图重画（恒 gate 单模式、加 wrongbook 节点与内联通道、align 移出图外）；④ 评测表已含 memory 行（上轮），口径说明补 memory 红线；⑤ 事实修正：测试数 397→403、安装节删已失真的 SCORE_FORCE=trusted 描述、开发计划 Now 改为 D50 重建 + 前端接入 complete（对齐 CHANGES 快照遗留）
+- 验证:未跑测试（纯文档改动）；架构图节点/边逐一对照 `app/api/shenlun.py` 与 `src/shenlun/` 现有模块核对（wrongbook 边由 API 层调入，非 reflow 直写）；分层表对照 docs/42 拍板记录与 CHANGES 快照
+- 遗留:① score/medium 旧基线 ⚠️ 退役标注保留（D50 重建前为真实状态）；②「能力诊断」标「部分」（diagnose 聚合已就绪、逐级下钻与同类题推荐未做），与代码现状一致
+- commit:待回填
+- 验收批注:(待 WorkBuddy 填)
+
 ## [2026-09-08] memory 评测套件落地：记忆闭环生命周期回归入 eval 体系 — Claude Code
 - 对应计划:计划外（用户提出「受控记忆闭环缺业务量化收口」并选定方案 B：照四套件模式补 memory 套件；本轮为简历材料语境下的数字补测，口径冻结于 `eval/memory_eval.py` docstring）
 - 改动:新增 `eval/memory_eval.py`（10 场景 × 22 检查项，逐场景临时库隔离，确定性 0 token、真实参数不 patch：S1-S4 毕业闭环=候选判定/毕业考命中毕业/考砸连击归零/连击与间隔双拦截、S5-S6 隔离防死锁 30 轮真实参数与复活、S7 遗忘衰减排序、S8 提醒池过滤与档案保留、S9 疑似按 miss 入库必留 suspect 溯源行（docs/42 B1 口径）、S10 内联题 complete 404 零写入红线；红线 2 条=内联泄漏/疑似缺溯源）+ `scripts/run_evals.py`（SUITES 接入第 5 套件、extract_summary 扁平化 memory 块、HEADLINE 加「记忆闭环行为达标率」↑）+ `README.md` 评测表补 memory 行
