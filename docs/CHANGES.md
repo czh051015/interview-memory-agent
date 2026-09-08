@@ -38,7 +38,7 @@
 - 改动:重写 `README.md`——① 删全部面试域历史叙述（包名由来改中性一句「历史命名保留」、遗留模块改「历史遗留待清理」不提前身域、FAQ 删 Ollama 面试域句）；② 修正滞后架构：「双模式评分路由（trusted）」整节替换为「单模式评分与来源分层」（gate 恒三色 + points_source L1/L2/L3 分流表 + 只有 L1 进记忆闭环红线 + align 退役说明），能力表 / 数据与记忆 / FAQ 同步（含 docs/42 B1：疑似按 miss 入库必留溯源、内联零回流通道）；③ 架构图重画（恒 gate 单模式、加 wrongbook 节点与内联通道、align 移出图外）；④ 评测表已含 memory 行（上轮），口径说明补 memory 红线；⑤ 事实修正：测试数 397→403、安装节删已失真的 SCORE_FORCE=trusted 描述、开发计划 Now 改为 D50 重建 + 前端接入 complete（对齐 CHANGES 快照遗留）
 - 验证:未跑测试（纯文档改动）；架构图节点/边逐一对照 `app/api/shenlun.py` 与 `src/shenlun/` 现有模块核对（wrongbook 边由 API 层调入，非 reflow 直写）；分层表对照 docs/42 拍板记录与 CHANGES 快照
 - 遗留:① score/medium 旧基线 ⚠️ 退役标注保留（D50 重建前为真实状态）；②「能力诊断」标「部分」（diagnose 聚合已就绪、逐级下钻与同类题推荐未做），与代码现状一致
-- commit:待回填
+- commit:`1efcbad`
 - 验收批注:(待 WorkBuddy 填)
 
 ## [2026-09-08] memory 评测套件落地：记忆闭环生命周期回归入 eval 体系 — Claude Code
