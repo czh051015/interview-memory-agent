@@ -38,7 +38,7 @@
 - 改动:新增 `eval/memory_eval.py`（10 场景 × 22 检查项，逐场景临时库隔离，确定性 0 token、真实参数不 patch：S1-S4 毕业闭环=候选判定/毕业考命中毕业/考砸连击归零/连击与间隔双拦截、S5-S6 隔离防死锁 30 轮真实参数与复活、S7 遗忘衰减排序、S8 提醒池过滤与档案保留、S9 疑似按 miss 入库必留 suspect 溯源行（docs/42 B1 口径）、S10 内联题 complete 404 零写入红线；红线 2 条=内联泄漏/疑似缺溯源）+ `scripts/run_evals.py`（SUITES 接入第 5 套件、extract_summary 扁平化 memory 块、HEADLINE 加「记忆闭环行为达标率」↑）+ `README.md` 评测表补 memory 行
 - 验证:`python eval/memory_eval.py` → **22/22 达标率 100%，红线内联泄漏 0、疑似缺溯源 0，llm_calls=0**（结果归档 eval/results/baseline/memory_eval_results.json）；`ruff check eval/memory_eval.py scripts/run_evals.py` 零报错；`python scripts/run_evals.py --baseline` → 5/5 json 登记，后续真实 run 以此为对比基准
 - 遗留:① 全套件 `python scripts/run_evals.py` 未跑（decompose/demo 需 DeepSeek key，本轮避免 LLM 成本），下次正常回归五套件同跑以验证 comparison 兼容；② 简历草稿「AI 疑似标注与未经人审采分点一律不固化为漏答」与 docs/42 B1 拍板（suspect 按 miss 入库 + events 溯源、内联零通道）存在口径差——前半句建议改「疑似不硬判命中、入库必留溯源、命中即复活」，后半句（内联/未人审零回流通道）成立，待用户定稿简历措辞；③ README「397 个 pytest 用例」实为 403，存量偏差未顺手改（非本轮范围）
-- commit:待回填
+- commit:`6fe1ded`
 - 验收批注:(待 WorkBuddy 填)
 
 ## [2026-09-07] docs/42 落地：评分单模式化 + 采分点来源分层 — Claude Code
